@@ -29,6 +29,10 @@ const char *mqtt_pass = mqtt_password;
 #define MQTT_TOPIC_CONFIG MQTT_CONFIG_PREFIX MQTT_TOPIC_NAME "/config"
 #define MQTT_TOPIC_STATE MQTT_GENERAL_PREFIX "/" DEVICE_BOARD_NAME "/state"
 
+#define LED_PIN PC13
+#define TdsSensorPin PB1
+#define FlowSensorPin PB2
+
 #include "controlWiFi.h" 
 WiFiClient client;
 
@@ -54,14 +58,22 @@ char Buffer[256];
 Scheduler runner;
 
 void TDSSensorCallback();
+void FLowMeterCallback();
 void TemperatureSensorCallback();
 void MQTTMessageCallback();
 
-Task TDSThread(10 * TASK_SECOND, TASK_FOREVER, &TDSSensorCallback, &runner, true);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
+Task TDSThread(1 * TASK_MINUTE, TASK_FOREVER, &TDSSensorCallback, &runner, true);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
 Task TempThread(10 * TASK_SECOND, TASK_FOREVER, &TDSSensorCallback, &runner, true);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
 Task mqttThread(1 * TASK_MINUTE, TASK_FOREVER, &MQTTMessageCallback, &runner, true);  //Runs every 5 minutes after several measurements of Ultrasonic Sensor
 
 
+#include "GravityTDS.h"
+GravityTDS gravityTds;
+float tdsValue = 0;
+float temperature = 25;
+
+#include "flowmeter.h"
+const char *FlowMeterTimerPin = FlowSensorPin;
 
 void setup() {
 // Debug console
@@ -112,6 +124,16 @@ void setup() {
   serializeJson(JsonSensorConfig, Buffer);
   
   initializeMQTT(mqtt, mqtt_user, mqtt_pass, MQTTTopicConfig, Buffer);
+
+  //Initialise TDS sensor
+  gravityTds.setPin(TdsSensorPin);
+  gravityTds.setAref(5.0);  //reference voltage on ADC, default 5.0V on Arduino UNO
+  gravityTds.setAdcRange(4096);  //1024 for 10bit ADC;4096 for 12bit ADC
+  gravityTds.begin();  //initialization
+
+  //setup flow meter
+  FlowMeterInit(FlowMeterTimerPin);
+
   
   runner.startNow();  // This creates a new scheduling starting point for all ACTIVE tasks.
 
@@ -125,12 +147,22 @@ void loop() {
 
 void TDSSensorCallback()
 {
-  //Serial.println("Triggering distance measure...");
-  unsigned int LastLevel = UltrasonicGetDistance();
-  //Serial.print("Received value: ");
-  //Serial.println(LastLevel);
-  if(LastLevel > 0){
-    LevelsArray.addValue(LastLevel);
-  }
+  Serial.println("TDS sensor measure...");
+  gravityTds.setTemperature(temperature);  // set the temperature and execute temperature compensation
+  gravityTds.update();  //sample and calculate
+  tdsValue = gravityTds.getTdsValue();  // then get the value
+  Serial.print("Received value: ");
+  Serial.print(tdsValue,0);
+  Serial.println("ppm");
+    
   IWatchdog.reload();
+}
+
+void FLowMeterCallback()
+{
+  digitalWrite(LED_PIN, HIGH); // activate gate signal
+  delayMicroseconds(1000);    //delay(1);
+  digitalWrite(LED_PIN, LOW); // deactivate gate signal
+  Serial << "Count = " << timer_get_count(TIMER2) << endl; // should be: 1000µs/1/9MHz = ~9000
+  timer_set_count(TIMER2, 0); // reset counter
 }
