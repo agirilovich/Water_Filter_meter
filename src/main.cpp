@@ -26,12 +26,20 @@ const char *mqtt_pass = mqtt_password;
 #define MQTT_CONFIG_PREFIX "homeassistant"
 #define SENSOR_NAME "Drink Water Filter Condition"
 
-#define MQTT_TOPIC_CONFIG MQTT_CONFIG_PREFIX MQTT_TOPIC_NAME "/config"
-#define MQTT_TOPIC_STATE MQTT_GENERAL_PREFIX "/" DEVICE_BOARD_NAME "/state"
+#define MQTT_TOPIC_TEMP_CONFIG MQTT_CONFIG_PREFIX MQTT_TOPIC_NAME "/temp/config"
+#define MQTT_TOPIC_TDS_CONFIG MQTT_CONFIG_PREFIX MQTT_TOPIC_NAME "/tds/config"
+#define MQTT_TOPIC_FLOW_CONFIG MQTT_CONFIG_PREFIX MQTT_TOPIC_NAME "/flow/config"
+
+#define MQTT_TOPIC_STATE MQTT_GENERAL_PREFIX "/" DEVICE_BOARD_NAME
+
+#define MQTT_TEMP_TOPIC_STATE MQTT_TOPIC_STATE "/temp/state"
+#define MQTT_TDS_TOPIC_STATE MQTT_TOPIC_STATE "/tds/state"
+#define MQTT_FLOW_TOPIC_STATE MQTT_TOPIC_STATE "/flow/state"
 
 #define LED_PIN PC13
 #define TdsSensorPin PB1
 #define FlowSensorPin PB2
+#define NTC_SENSOR_PIN PB0
 
 #include "controlWiFi.h" 
 WiFiClient client;
@@ -40,10 +48,14 @@ WiFiClient client;
 PubSubClient mqtt(client);
 
 //Define MQTT Topic for HomeAssistant Discovery
-const char *MQTTTopicConfig = MQTT_TOPIC_CONFIG;
+const char *MQTTTempTopicConfig = MQTT_TOPIC_TEMP_CONFIG;
+const char *MQTTTDSTopicConfig = MQTT_TOPIC_TDS_CONFIG;
+const char *MQTTFlowTopicConfig = MQTT_TOPIC_FLOW_CONFIG;
 
 //Define MQTT Topic for HomeAssistant Sensor state
-const char *MQTTTopicState = MQTT_TOPIC_STATE;
+const char *MQTTTempTopicState = MQTT_TEMP_TOPIC_STATE;
+const char *MQTTTDSTopicState = MQTT_TDS_TOPIC_STATE;
+const char *MQTTFlowTopicState = MQTT_FLOW_TOPIC_STATE;
 
 //Define objects for MQTT messages in JSON format
 #include <ArduinoJson.h>
@@ -63,27 +75,33 @@ void TemperatureSensorCallback();
 void MQTTMessageCallback();
 
 Task TDSThread(1 * TASK_MINUTE, TASK_FOREVER, &TDSSensorCallback, &runner, true);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
+Task FlowThread(1 * TASK_MINUTE, TASK_FOREVER, &FLowMeterCallback, &runner, true);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
 Task TempThread(10 * TASK_SECOND, TASK_FOREVER, &TDSSensorCallback, &runner, true);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
-Task mqttThread(1 * TASK_MINUTE, TASK_FOREVER, &MQTTMessageCallback, &runner, true);  //Runs every 5 minutes after several measurements of Ultrasonic Sensor
+Task mqttThread(5 * TASK_MINUTE, TASK_FOREVER, &MQTTMessageCallback, &runner, true);  //Runs every 5 minutes after several measurements of Ultrasonic Sensor
 
+
+#include "flowmeter.h"
+uint64_t WaterConsumption;
+
+#include <Thermistor.h>
+#include <NTC_Thermistor.h>
+#define NTC_REFERENCE_RESISTANCE   10000
+#define NTC_NOMINAL_RESISTANCE     50000
+#define NTC_NOMINAL_TEMPERATURE    25
+#define NTC_B_VALUE                3950
+#define STM32_ANALOG_RESOLUTION 4095
+
+Thermistor* thermistor;
 
 #include "GravityTDS.h"
 GravityTDS gravityTds;
-float tdsValue = 0;
-float temperature = 25;
+double tdsValue = 0;
+double temperature = NTC_NOMINAL_TEMPERATURE;
 
-#include "flowmeter.h"
-const char *FlowMeterTimerPin = FlowSensorPin;
 
 void setup() {
-// Debug console
+  // Debug console
   Serial.begin(115200);
-
-  JsonSensorConfig["name"] = SENSOR_NAME;
-  JsonSensorConfig["device_class"] = "distance";
-  JsonSensorConfig["state_class"] = "measurement";
-  JsonSensorConfig["unit_of_measurement"] = "mm";
-  JsonSensorConfig["state_topic"] = MQTTTopicState;
 
   while (!Serial && millis() < 5000);
 
@@ -121,9 +139,42 @@ void setup() {
   
   //Initialise MQTT autodiscovery topic and sensor
   mqtt.setServer(mqtt_host, mqtt_port);
+
+  //NTC sensor
+  JsonSensorConfig["name"] = "Water temperature";
+  JsonSensorConfig["device_class"] = "temperature";
+  JsonSensorConfig["state_class"] = "measurement";
+  JsonSensorConfig["unit_of_measurement"] = "C";
+  JsonSensorConfig["state_topic"] = MQTTTempTopicState;
+
+  JsonObject device  = JsonSensorConfig.createNestedObject("device");
+  device["identifiers"][0] = SENSOR_NAME;
+  device["model"] = "DWS-MH-01";
+  device["name"] = SENSOR_NAME;
+  device["manufacturer"] = "Aliexpress"; 
+  device["sw_version"] = "1.0";  
   serializeJson(JsonSensorConfig, Buffer);
-  
-  initializeMQTT(mqtt, mqtt_user, mqtt_pass, MQTTTopicConfig, Buffer);
+  initializeMQTT(mqtt, mqtt_user, mqtt_pass, MQTTTempTopicConfig, Buffer);
+
+  //TDS sensor
+  JsonSensorConfig["name"] = "Water TDS";
+  JsonSensorConfig["device_class"] = "None";
+  JsonSensorConfig["state_class"] = "measurement";
+  JsonSensorConfig["unit_of_measurement"] = "ppm";
+  JsonSensorConfig["state_topic"] = MQTTTDSTopicState;
+
+  serializeJson(JsonSensorConfig, Buffer);
+  initializeMQTT(mqtt, mqtt_user, mqtt_pass, MQTTTDSTopicConfig, Buffer);
+
+  //Flow sensor
+  JsonSensorConfig["name"] = "Water Flow";
+  JsonSensorConfig["device_class"] = "water";
+  JsonSensorConfig["state_class"] = "measurement";
+  JsonSensorConfig["unit_of_measurement"] = "L";
+  JsonSensorConfig["state_topic"] = MQTTFlowTopicState;
+
+  serializeJson(JsonSensorConfig, Buffer);
+  initializeMQTT(mqtt, mqtt_user, mqtt_pass, MQTTFlowTopicConfig, Buffer);
 
   //Initialise TDS sensor
   gravityTds.setPin(TdsSensorPin);
@@ -132,9 +183,18 @@ void setup() {
   gravityTds.begin();  //initialization
 
   //setup flow meter
-  FlowMeterInit(FlowMeterTimerPin);
+  FlowMeterInit(FlowSensorPin);
 
-  
+  //setup NTC sensor
+  thermistor = new NTC_Thermistor(
+    NTC_SENSOR_PIN,
+    NTC_REFERENCE_RESISTANCE,
+    NTC_NOMINAL_RESISTANCE,
+    NTC_NOMINAL_TEMPERATURE,
+    NTC_B_VALUE,
+    STM32_ANALOG_RESOLUTION // <- for a thermistor calibration
+  );
+
   runner.startNow();  // This creates a new scheduling starting point for all ACTIVE tasks.
 
 }
@@ -152,17 +212,42 @@ void TDSSensorCallback()
   gravityTds.update();  //sample and calculate
   tdsValue = gravityTds.getTdsValue();  // then get the value
   Serial.print("Received value: ");
-  Serial.print(tdsValue,0);
-  Serial.println("ppm");
+  Serial.print(tdsValue);
+  Serial.println(" ppm");
     
   IWatchdog.reload();
 }
 
 void FLowMeterCallback()
 {
-  digitalWrite(LED_PIN, HIGH); // activate gate signal
-  delayMicroseconds(1000);    //delay(1);
-  digitalWrite(LED_PIN, LOW); // deactivate gate signal
-  Serial << "Count = " << timer_get_count(TIMER2) << endl; // should be: 1000µs/1/9MHz = ~9000
-  timer_set_count(TIMER2, 0); // reset counter
+  Serial.println("Read data from Input Counter Hardware Timer...");
+  WaterConsumption = WaterConsumption + GetFlowCounter();
+  Serial.print("Received value: ");
+  Serial.print(WaterConsumption);
+  Serial.println(" L");
+
+  IWatchdog.reload();
+}
+
+void TemperatureSensorCallback()
+{
+  Serial.println("NTC sensor measure...");
+  temperature = thermistor->readCelsius();
+  Serial.print("Received value: ");
+  Serial.print(temperature);
+  Serial.println(" C");
+
+  IWatchdog.reload();
+}
+
+void MQTTMessageCallback()
+{
+  //Publish MQTT messages
+  Serial.println("Publishing MQTT messages...");
+  if (!publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTTempTopicState, (char*)temperature) || !publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTTDSTopicState, (char*)tdsValue) || !publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTFlowTopicState, (char*)WaterConsumption) ) {
+    runner.disableAll();   //pause runner and wait for watchdog if MQTT is broken
+  }
+  else {
+    Serial.println("Done");
+  }
 }

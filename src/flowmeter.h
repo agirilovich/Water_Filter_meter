@@ -1,2 +1,5 @@
+#include <Arduino.h>
+#include <stdint.h>
 
-void FlowMeterInit(const char *pin);
+void FlowMeterInit(PinName pin);
+uint64_t GetFlowCounter(void);
