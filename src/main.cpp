@@ -44,12 +44,16 @@ const char *mqtt_pass = mqtt_password;
 #define TdsSensorPin PB1
 #define NTC_SENSOR_PIN PB0
 
+#define BEEPER_PIN PA7
+
 #define BUTTON_1 PA4
 #define BUTTON_2 PA5
 
 
 #include "lcd.h"
 char DisplayBuf[16];
+int DisplayState = 0;
+enum DisplayView {Temperature, TDS, Consumption, Filter1, Filter2, Filter3};
 
 #include "controlWiFi.h" 
 WiFiClient client;
@@ -88,33 +92,21 @@ char Buffer[256];
 
 Scheduler HPRrunner; //high priority scheduler
 Scheduler runner; //normal priority scheduler
-Scheduler lowrunner; //low priority scheduler
 
 void TDSSensorCallback();
 void FLowMeterCallback();
 void TemperatureSensorCallback();
 void MQTTMessageCallback();
 void DisplayControlCallback();
-void DisplayTemperatureCallback();
-void DisplayTDSCallback();
-void DisplayConsumptionCallback();
-void DisplayFilter1Callback();
-void DisplayFilter2Callback();
-void DisplayFilter3Callback();
+
+void Button1Handler();
+void Button2Handler();
 
 Task TDSThread(1 * TASK_MINUTE, TASK_FOREVER, &TDSSensorCallback, &runner, false);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
 Task FlowThread(1 * TASK_MINUTE, TASK_FOREVER, &FLowMeterCallback, &HPRrunner, false);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
 Task TempThread(10 * TASK_SECOND, TASK_FOREVER, &TDSSensorCallback, &runner, false);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
 Task mqttThread(5 * TASK_MINUTE, TASK_FOREVER, &MQTTMessageCallback, &runner, false);  //Runs every 5 minutes after several measurements of Ultrasonic Sensor
 Task DisplayControl(10 * TASK_SECOND, TASK_FOREVER, &DisplayControlCallback, &runner, false);
-//set of low-priority tasks for display output
-Task DisplayTemperature(0, TASK_ONCE, &DisplayTemperatureCallback, &lowrunner, false);
-Task DisplayTDS(0, TASK_ONCE, &DisplayTemperatureCallback, &lowrunner, false);
-Task DisplayConsumption(0, TASK_ONCE, &DisplayConsumptionCallback, &lowrunner, false);
-Task DisplayFilter1(0, TASK_ONCE, &DisplayFilter1Callback, &lowrunner, false);
-Task DisplayFilter2(0, TASK_ONCE, &DisplayFilter2Callback, &lowrunner, false);
-Task DisplayFilter3(0, TASK_ONCE, &DisplayFilter3Callback, &lowrunner, false);
-
 
 #include "flowmeter.h"
 uint64_t WaterConsumption = 0;
@@ -267,16 +259,17 @@ void setup() {
     STM32_ANALOG_RESOLUTION // <- for a thermistor calibration
   );
 
+  //Set ports for buttons
   pinMode(BUTTON_1, INPUT_PULLUP);
   pinMode(BUTTON_2, INPUT_PULLUP);
+
+  //Set port for beeper
+  pinMode(BEEPER_PIN, OUTPUT);
 
   attachInterrupt(digitalPinToInterrupt(BUTTON_1), Button1Handler, FALLING);
   attachInterrupt(digitalPinToInterrupt(BUTTON_2), Button2Handler, FALLING);
 
-  lowrunner.setHighPriorityScheduler(&runner);
   runner.setHighPriorityScheduler(&HPRrunner);
-  HPRrunner.enableAll(true);
-
   runner.enableAll(true);
 
   //runner.startNow();  // This creates a new scheduling starting point for all ACTIVE tasks.
@@ -352,70 +345,99 @@ void MQTTMessageCallback()
   }
 }
 
-void DisplayControlCallback(void)
+void DisplayControlCallback()
 {
-  int Interval = 30;
-  if (!DisplayTemperature.isEnabled() && !DisplayTDS.isEnabled() && !DisplayConsumption.isEnabled() && !DisplayFilter1.isEnabled() && !DisplayFilter2.isEnabled() && !DisplayFilter3.isEnabled())
+  char Title[16];
+  switch(DisplayState)
   {
-    DisplayTemperature.enableDelayed(1 * Interval);
-    DisplayTDS.enableDelayed(2 * Interval);
-    DisplayConsumption.enableDelayed(3 * Interval);
-    DisplayFilter1.enableDelayed(4 * Interval);
-    DisplayFilter2.enableDelayed(5 * Interval);
-    DisplayFilter3.enableDelayed(6 * Interval);
+    case DisplayView::Temperature:
+    {
+      strcpy(Title, "Temperature, C:");
+      sprintf(DisplayBuf, "%2.3f", temperature);
+      clearLCD();
+      printLCD(1, Title);
+      printLCD(2, DisplayBuf);
+      break;
+    }
+    case DisplayView::TDS:
+    {
+      strcpy(Title, "Water TDS, ppm:");
+      sprintf(DisplayBuf, "%2.3f", tdsValue);
+      clearLCD();
+      printLCD(1, Title);
+      printLCD(2, DisplayBuf);
+      break;
+    }
+    case DisplayView::Consumption:
+    {
+      strcpy(Title, "Consumption, L:");
+      sprintf(DisplayBuf, "%" PRIu64, WaterConsumption / 1000);
+      clearLCD();
+      printLCD(1, Title);
+      printLCD(2, DisplayBuf);
+      break;
+    }
+    case DisplayView::Filter1:
+    {
+      strcpy(Title, "Filter 1, L:");
+      sprintf(DisplayBuf, "%" PRIu64, WaterConsumptionFilter1 / 1000);
+      clearLCD();
+      printLCD(1, Title);
+      printLCD(2, DisplayBuf);
+      break;
+    }
+    case DisplayView::Filter2:
+    {
+      strcpy(Title, "Filter 2, L:");
+      sprintf(DisplayBuf, "%" PRIu64, WaterConsumptionFilter2 / 1000);
+      clearLCD();
+      printLCD(1, Title);
+      printLCD(2, DisplayBuf);
+      break;
+    }
+    case DisplayView::Filter3:
+    {
+      strcpy(Title, "Filter 3, L:");
+      sprintf(DisplayBuf, "%" PRIu64, WaterConsumptionFilter3 / 1000);
+      clearLCD();
+      printLCD(1, Title);
+      printLCD(2, DisplayBuf);
+      break;
+    }
+  }
+  if (DisplayState < 5) {
+    DisplayState++;
+  }
+  else {
+    DisplayState = 0;
   }
 }
 
-void DisplayTemperatureCallback()
+void Button1Handler()
 {
-  char Title[16] = "Temperature, C:";
-  sprintf(DisplayBuf, "%2.3f", temperature);
-  clearLCD();
-  printLCD(1, Title);
-  printLCD(2, DisplayBuf);
+  //pause loop in a display
+  DisplayControl.disable();
+
+  //display current state of display
+  DisplayControlCallback();
+
+  //beeper
+  digitalWrite(BEEPER_PIN, HIGH);
+  delay(200);
+  digitalWrite(BEEPER_PIN, LOW);
+
+  //resume display loop after timeout
+  DisplayControl.enableDelayed(60);
 }
 
-void DisplayTDSCallback()
-{
-  char Title[16] = "Water TDS, ppm:";
-  sprintf(DisplayBuf, "%2.3f", tdsValue);
-  clearLCD();
-  printLCD(1, Title);
-  printLCD(2, DisplayBuf);
-}
 
-void DisplayConsumptionCallback()
+void Button2Handler()
 {
-  char Title[16] = "Consumption, L:";
-  sprintf(DisplayBuf, "%" PRIu64, WaterConsumption / 1000);
-  clearLCD();
-  printLCD(1, Title);
-  printLCD(2, DisplayBuf);
-}
+  //pause loop in a display
+  DisplayControl.disable();
 
-void DisplayFilter1Callback()
-{
-  char Title[16] = "Filter 1, L:";
-  sprintf(DisplayBuf, "%" PRIu64, WaterConsumptionFilter1 / 1000);
-  clearLCD();
-  printLCD(1, Title);
-  printLCD(2, DisplayBuf);
-}
+  
 
-void DisplayFilter2Callback()
-{
-  char Title[16] = "Filter 2, L:";
-  sprintf(DisplayBuf, "%" PRIu64, WaterConsumptionFilter2 / 1000);
-  clearLCD();
-  printLCD(1, Title);
-  printLCD(2, DisplayBuf);
-}
-
-void DisplayFilter3Callback()
-{
-  char Title[16] = "Filter 3, L:";
-  sprintf(DisplayBuf, "%" PRIu64, WaterConsumptionFilter3 / 1000);
-  clearLCD();
-  printLCD(1, Title);
-  printLCD(2, DisplayBuf);
+  //resume display loop after timeout
+  DisplayControl.enableDelayed(60);
 }
