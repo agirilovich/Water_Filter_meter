@@ -44,6 +44,10 @@ const char *mqtt_pass = mqtt_password;
 #define TdsSensorPin PB1
 #define NTC_SENSOR_PIN PB0
 
+#define BUTTON_1 PA4
+#define BUTTON_2 PA5
+
+
 #include "lcd.h"
 char DisplayBuf[16];
 
@@ -262,6 +266,12 @@ void setup() {
     NTC_B_VALUE,
     STM32_ANALOG_RESOLUTION // <- for a thermistor calibration
   );
+
+  pinMode(BUTTON_1, INPUT_PULLUP);
+  pinMode(BUTTON_2, INPUT_PULLUP);
+
+  attachInterrupt(digitalPinToInterrupt(BUTTON_1), Button1Handler, FALLING);
+  attachInterrupt(digitalPinToInterrupt(BUTTON_2), Button2Handler, FALLING);
 
   lowrunner.setHighPriorityScheduler(&runner);
   runner.setHighPriorityScheduler(&HPRrunner);
