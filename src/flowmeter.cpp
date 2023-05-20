@@ -32,18 +32,17 @@ void Rollover_callback(void)
   }
 }
 
-void FlowMeterInit(PinName pin)
+void FlowMeterInit(void)
 {
   // Automatically retrieve TIM instance and channel associated to pin
-  TIM_TypeDef *Instance = (TIM_TypeDef *)pinmap_peripheral(pin, PinMap_PWM);
-  //channel = STM_PIN_CHANNEL(pinmap_function(digitalPinToPinName(pin), PinMap_PWM));
-  channel = STM_PIN_CHANNEL(pinmap_function(pin, PinMap_PWM));
+  TIM_TypeDef *Instance = (TIM_TypeDef *)pinmap_peripheral(digitalPinToPinName(FlowSensorPin), PinMap_PWM);
+  channel = STM_PIN_CHANNEL(pinmap_function(digitalPinToPinName(FlowSensorPin), PinMap_PWM));
 
   // Instantiate HardwareTimer object.
   FlowTimer = new HardwareTimer(Instance);
 
   // Configure rising edge detection
-  FlowTimer->setMode(channel, TIMER_INPUT_CAPTURE_RISING, pin);
+  FlowTimer->setMode(channel, TIMER_INPUT_CAPTURE_RISING, FlowSensorPin);
 
   uint32_t PrescalerFactor = 1024;
   FlowTimer->setPrescaleFactor(PrescalerFactor);

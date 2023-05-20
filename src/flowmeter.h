@@ -1,5 +1,7 @@
 #include <Arduino.h>
 #include <stdint.h>
 
-void FlowMeterInit(PinName pin);
+#define FlowSensorPin PB2
+
+void FlowMeterInit(void);
 uint64_t GetFlowCounter(void);
