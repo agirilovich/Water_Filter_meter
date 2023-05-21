@@ -46,14 +46,24 @@ const char *mqtt_pass = mqtt_password;
 
 #define BEEPER_PIN PA7
 
-#define BUTTON_1 PA4
-#define BUTTON_2 PA5
+#define BUTTON_PIN_1 PA4
+#define BUTTON_PIN_2 PA5
 
+
+//objects for button processing
+#include <EasyButton.h>
+EasyButton button1(BUTTON_PIN_1);
+EasyButton button2(BUTTON_PIN_2);
+void button1ISR();
+void button2ISR();
+void Button1Handler();
+void Button2Handler();
+void Button2HandlerLong();
 
 #include "lcd.h"
 char DisplayBuf[16];
 int DisplayState = 0;
-enum DisplayView {Temperature, TDS, Consumption, Filter1, Filter2, Filter3};
+enum DisplayView {Temperature, TDS, Consumption, Filter1, Filter2, Filter3, Cancel, Done, Reset1, Reset2, Reset3};
 
 #include "controlWiFi.h" 
 WiFiClient client;
@@ -98,15 +108,16 @@ void FLowMeterCallback();
 void TemperatureSensorCallback();
 void MQTTMessageCallback();
 void DisplayControlCallback();
-
-void Button1Handler();
-void Button2Handler();
+void DisplayControlRestartCallback();
+void ButtonsUpdateCallback();
 
 Task TDSThread(1 * TASK_MINUTE, TASK_FOREVER, &TDSSensorCallback, &runner, false);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
 Task FlowThread(1 * TASK_MINUTE, TASK_FOREVER, &FLowMeterCallback, &HPRrunner, false);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
 Task TempThread(10 * TASK_SECOND, TASK_FOREVER, &TDSSensorCallback, &runner, false);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
 Task mqttThread(5 * TASK_MINUTE, TASK_FOREVER, &MQTTMessageCallback, &runner, false);  //Runs every 5 minutes after several measurements of Ultrasonic Sensor
 Task DisplayControl(10 * TASK_SECOND, TASK_FOREVER, &DisplayControlCallback, &runner, false);
+Task DisplayControlRestart(0, TASK_ONCE, &DisplayControlRestartCallback, &runner, false);
+Task ButtonsUpdate(1 * TASK_SECOND, TASK_FOREVER, &ButtonsUpdateCallback, &runner, false);
 
 #include "flowmeter.h"
 uint64_t WaterConsumption = 0;
@@ -259,15 +270,15 @@ void setup() {
     STM32_ANALOG_RESOLUTION // <- for a thermistor calibration
   );
 
-  //Set ports for buttons
-  pinMode(BUTTON_1, INPUT_PULLUP);
-  pinMode(BUTTON_2, INPUT_PULLUP);
-
   //Set port for beeper
   pinMode(BEEPER_PIN, OUTPUT);
 
-  attachInterrupt(digitalPinToInterrupt(BUTTON_1), Button1Handler, FALLING);
-  attachInterrupt(digitalPinToInterrupt(BUTTON_2), Button2Handler, FALLING);
+  button1.begin();
+  button1.enableInterrupt(button1ISR);
+  button1.onPressed(Button1Handler);
+  button2.begin();
+  button2.enableInterrupt(button2ISR);
+  button2.onPressedFor(5000, Button2HandlerLong);
 
   runner.setHighPriorityScheduler(&HPRrunner);
   runner.enableAll(true);
@@ -357,6 +368,7 @@ void DisplayControlCallback()
       clearLCD();
       printLCD(1, Title);
       printLCD(2, DisplayBuf);
+      DisplayState++;
       break;
     }
     case DisplayView::TDS:
@@ -366,6 +378,7 @@ void DisplayControlCallback()
       clearLCD();
       printLCD(1, Title);
       printLCD(2, DisplayBuf);
+      DisplayState++;
       break;
     }
     case DisplayView::Consumption:
@@ -375,6 +388,7 @@ void DisplayControlCallback()
       clearLCD();
       printLCD(1, Title);
       printLCD(2, DisplayBuf);
+      DisplayState++;
       break;
     }
     case DisplayView::Filter1:
@@ -384,6 +398,7 @@ void DisplayControlCallback()
       clearLCD();
       printLCD(1, Title);
       printLCD(2, DisplayBuf);
+      DisplayState++;
       break;
     }
     case DisplayView::Filter2:
@@ -393,6 +408,7 @@ void DisplayControlCallback()
       clearLCD();
       printLCD(1, Title);
       printLCD(2, DisplayBuf);
+      DisplayState++;
       break;
     }
     case DisplayView::Filter3:
@@ -402,14 +418,95 @@ void DisplayControlCallback()
       clearLCD();
       printLCD(1, Title);
       printLCD(2, DisplayBuf);
+      DisplayState = 0;
+      break;
+    }
+    case DisplayView::Reset1:
+    {
+      strcpy(Title, "Reset Filter 1?");
+      strcpy(DisplayBuf, "NO          YES");
+      clearLCD();
+      printLCD(1, Title);
+      printLCD(2, DisplayBuf);
+      break;
+    }
+    case DisplayView::Reset2:
+    {
+      strcpy(Title, "Reset Filter 2?");
+      strcpy(DisplayBuf, "NO          YES");
+      clearLCD();
+      printLCD(1, Title);
+      printLCD(2, DisplayBuf);
+      break;
+    }
+    case DisplayView::Reset3:
+    {
+      strcpy(Title, "Reset Filter 3?");
+      strcpy(DisplayBuf, "NO          YES");
+      clearLCD();
+      printLCD(1, Title);
+      printLCD(2, DisplayBuf);
+      break;
+    }
+    case DisplayView::Cancel:
+    {
+      strcpy(Title, "Canceled");
+      clearLCD();
+      printLCD(1, Title);
+      DisplayState = 0;
+      break;
+    }
+    case DisplayView::Done:
+    {
+      strcpy(Title, "Done");
+      clearLCD();
+      printLCD(1, Title);
+      DisplayState = 0;
       break;
     }
   }
-  if (DisplayState < 5) {
-    DisplayState++;
+
+  //resume display loop after timeout
+  if (!DisplayControl.isEnabled())
+  {
+    DisplayControlRestart.enableDelayed(60);
+  }
+}
+
+void DisplayControlRestartCallback()
+{
+  DisplayState = 0;
+  DisplayControl.enable();
+}
+
+void ButtonsUpdateCallback()
+{
+  button1.update();
+  button2.update();
+}
+
+void button1ISR()
+{
+  button1.read();
+  if (button1.wasPressed())
+  {
+    //beeper
+    digitalWrite(BEEPER_PIN, HIGH);
   }
   else {
-    DisplayState = 0;
+    digitalWrite(BEEPER_PIN, LOW);
+  }
+}
+void button2ISR()
+{
+  button2.read();
+  if (button1.wasPressed())
+  {
+    //beeper
+    digitalWrite(BEEPER_PIN, HIGH);
+  }
+  else {
+    digitalWrite(BEEPER_PIN, LOW);
   }
 }
 
@@ -418,26 +515,81 @@ void Button1Handler()
   //pause loop in a display
   DisplayControl.disable();
 
-  //display current state of display
-  DisplayControlCallback();
-
-  //beeper
-  digitalWrite(BEEPER_PIN, HIGH);
-  delay(200);
-  digitalWrite(BEEPER_PIN, LOW);
-
-  //resume display loop after timeout
+  if (DisplayState == 6)
+  {
+    DisplayState = 7;
+    DisplayControlCallback();
+  }
+  else {
+    DisplayControlCallback();
+  }
   DisplayControl.enableDelayed(60);
 }
 
+
+void Button2HandlerLong()
+{
+  //pause loop in a display
+  DisplayControl.disable();
+  switch(DisplayState)
+  {
+    case DisplayView::Filter1:
+    {
+      DisplayState = 8;
+      DisplayControlCallback();
+      break;
+    }
+    case DisplayView::Filter2:
+    {
+      DisplayState = 9;
+      DisplayControlCallback();
+      break;
+    }
+    case DisplayView::Filter3:
+    {
+      DisplayState = 10;
+      DisplayControlCallback();
+      break;
+    }
+    default:
+    {
+      DisplayState = 6;
+      DisplayControlCallback();
+    }
+  }
+}
 
 void Button2Handler()
 {
   //pause loop in a display
   DisplayControl.disable();
-
-  
-
-  //resume display loop after timeout
-  DisplayControl.enableDelayed(60);
+  switch(DisplayState)
+  {
+    case DisplayView::Reset1:
+    {
+      WaterConsumptionFilter1 = 0;
+      DisplayState = 7;
+      DisplayControlCallback();
+      break;
+    }
+    case DisplayView::Reset2:
+    {
+      WaterConsumptionFilter2 = 0;
+      DisplayState = 7;
+      DisplayControlCallback();
+      break;
+    }
+    case DisplayView::Reset3:
+    {
+      WaterConsumptionFilter3 = 0;
+      DisplayState = 7;
+      DisplayControlCallback();
+      break;
+    }
+    default:
+    {
+      DisplayState = 6;
+      DisplayControlCallback();
+    }
+  }
 }
