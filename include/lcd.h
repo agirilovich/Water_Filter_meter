@@ -8,7 +8,10 @@
 #define LCD_PIN_D6 PB13
 #define LCD_PIN_D7 PB12
 
+enum DisplayView {Temperature, TDS, Consumption, Filter1, Filter2, Filter3, Cancel, Done, Reset1, Reset2, Reset3};
+extern int DisplayState;
 
+void DisplayControlCallback();
 
 void initializeLCD(void);
 

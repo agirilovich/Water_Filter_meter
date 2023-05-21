@@ -1,4 +1,12 @@
 #include "flowmeter.h"
+#include <Thermistor.h>
+#include <NTC_Thermistor.h>
+#include "GravityTDS.h"
+
+GravityTDS gravityTds;
+
+float tdsValue = 0;
+float temperature = NTC_NOMINAL_TEMPERATURE;
 
 uint32_t channel;
 volatile uint32_t LastCapture = 0, CurrentCapture, PulseCounter = 0;
@@ -6,6 +14,11 @@ volatile uint32_t rolloverCompareCount = 0;
 const float FlowPulseCharacteristics = 1/(60*13);
 
 HardwareTimer *FlowTimer;
+
+struct FlowMeterData EEPROMData;
+
+Thermistor* thermistor;
+
 
 void InputCapture_callback(void)
 {
@@ -67,4 +80,59 @@ uint64_t GetFlowCounter(void)
   FlowTimer->resumeChannel(channel);
 
   return CurrentFlow;
+}
+
+void FLowMeterCallback()
+{
+  uint64_t CurrentFlow;
+  Serial.println("Read data from Input Counter Hardware Timer...");
+  CurrentFlow = GetFlowCounter();
+  EEPROMData.WaterConsumption = EEPROMData.WaterConsumption + CurrentFlow;
+  EEPROMData.WaterConsumptionFilter1 = EEPROMData.WaterConsumptionFilter1 + CurrentFlow;
+  EEPROMData.WaterConsumptionFilter2 = EEPROMData.WaterConsumptionFilter2 + CurrentFlow;
+  EEPROMData.WaterConsumptionFilter3 = EEPROMData.WaterConsumptionFilter3 + CurrentFlow;
+  Serial.print("Received value: ");
+  Serial.print(EEPROMData.WaterConsumption);
+  Serial.println(" L");
+}
+
+
+void NTCSensorInit(void)
+{
+  thermistor = new NTC_Thermistor(
+    NTC_SENSOR_PIN,
+    NTC_REFERENCE_RESISTANCE,
+    NTC_NOMINAL_RESISTANCE,
+    NTC_NOMINAL_TEMPERATURE,
+    NTC_B_VALUE,
+    STM32_ANALOG_RESOLUTION // <- for a thermistor calibration
+  );
+}
+
+void TemperatureSensorCallback()
+{
+  Serial.println("NTC sensor measure...");
+  temperature = thermistor->readCelsius();
+  Serial.print("Received value: ");
+  Serial.print(temperature);
+  Serial.println(" C");
+}
+
+void TDSSensorInit(void)
+{
+  gravityTds.setPin(TdsSensorPin);
+  gravityTds.setAref(5.0);  //reference voltage on ADC, default 5.0V on Arduino UNO
+  gravityTds.setAdcRange(4096);  //1024 for 10bit ADC;4096 for 12bit ADC
+  gravityTds.begin();  //initialization
+}
+
+void TDSSensorCallback()
+{
+  Serial.println("TDS sensor measure...");
+  gravityTds.setTemperature(temperature);  // set the temperature and execute temperature compensation
+  gravityTds.update();  //sample and calculate
+  tdsValue = gravityTds.getTdsValue();  // then get the value
+  Serial.print("Received value: ");
+  Serial.print(tdsValue);
+  Serial.println(" ppm");
 }

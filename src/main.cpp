@@ -41,8 +41,6 @@ const char *mqtt_pass = mqtt_password;
 #define MQTT_FILTER3_TOPIC_STATE MQTT_TOPIC_STATE "/filter3/state"
 
 #define LED_PIN PC13
-#define TdsSensorPin PB1
-#define NTC_SENSOR_PIN PB0
 
 #define BEEPER_PIN PA7
 
@@ -61,9 +59,6 @@ void Button2Handler();
 void Button2HandlerLong();
 
 #include "lcd.h"
-char DisplayBuf[16];
-int DisplayState = 0;
-enum DisplayView {Temperature, TDS, Consumption, Filter1, Filter2, Filter3, Cancel, Done, Reset1, Reset2, Reset3};
 
 #include "controlWiFi.h" 
 WiFiClient client;
@@ -100,15 +95,13 @@ char Buffer[256];
 #define _TASK_WDT_IDS
 #include <TaskScheduler.h>
 
+//load all the objects about water meter
+#include "flowmeter.h"
+
 Scheduler HPRrunner; //high priority scheduler
 Scheduler runner; //normal priority scheduler
 
-void TDSSensorCallback();
-void FLowMeterCallback();
-void TemperatureSensorCallback();
 void MQTTMessageCallback();
-void DisplayControlCallback();
-void DisplayControlRestartCallback();
 void ButtonsUpdateCallback();
 
 Task TDSThread(1 * TASK_MINUTE, TASK_FOREVER, &TDSSensorCallback, &runner, false);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
@@ -116,30 +109,7 @@ Task FlowThread(1 * TASK_MINUTE, TASK_FOREVER, &FLowMeterCallback, &HPRrunner, f
 Task TempThread(10 * TASK_SECOND, TASK_FOREVER, &TDSSensorCallback, &runner, false);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
 Task mqttThread(5 * TASK_MINUTE, TASK_FOREVER, &MQTTMessageCallback, &runner, false);  //Runs every 5 minutes after several measurements of Ultrasonic Sensor
 Task DisplayControl(10 * TASK_SECOND, TASK_FOREVER, &DisplayControlCallback, &runner, false);
-Task DisplayControlRestart(0, TASK_ONCE, &DisplayControlRestartCallback, &runner, false);
 Task ButtonsUpdate(1 * TASK_SECOND, TASK_FOREVER, &ButtonsUpdateCallback, &runner, false);
-
-#include "flowmeter.h"
-uint64_t WaterConsumption = 0;
-uint64_t WaterConsumptionFilter1 = 0;
-uint64_t WaterConsumptionFilter2 = 0;
-uint64_t WaterConsumptionFilter3 = 0;
-
-#include <Thermistor.h>
-#include <NTC_Thermistor.h>
-#define NTC_REFERENCE_RESISTANCE   10000
-#define NTC_NOMINAL_RESISTANCE     50000
-#define NTC_NOMINAL_TEMPERATURE    25
-#define NTC_B_VALUE                3950
-#define STM32_ANALOG_RESOLUTION 4095
-
-Thermistor* thermistor;
-
-#include "GravityTDS.h"
-GravityTDS gravityTds;
-double tdsValue = 0;
-double temperature = NTC_NOMINAL_TEMPERATURE;
-
 
 void setup() {
   // Debug console
@@ -156,6 +126,9 @@ void setup() {
 
   //initialise LCD
   initializeLCD();
+
+  //setup NTC sensor
+  NTCSensorInit();
 
   Serial.print(F("\nStart WiFiMQTT on "));
   Serial.print(DEVICE_BOARD_NAME);
@@ -252,23 +225,10 @@ void setup() {
   initializeMQTT(mqtt, mqtt_user, mqtt_pass, MQTTFilter3TopicConfig, Buffer);
 
   //Initialise TDS sensor
-  gravityTds.setPin(TdsSensorPin);
-  gravityTds.setAref(5.0);  //reference voltage on ADC, default 5.0V on Arduino UNO
-  gravityTds.setAdcRange(4096);  //1024 for 10bit ADC;4096 for 12bit ADC
-  gravityTds.begin();  //initialization
-
+  TDSSensorInit();
+  
   //setup flow meter
   FlowMeterInit();
-
-  //setup NTC sensor
-  thermistor = new NTC_Thermistor(
-    NTC_SENSOR_PIN,
-    NTC_REFERENCE_RESISTANCE,
-    NTC_NOMINAL_RESISTANCE,
-    NTC_NOMINAL_TEMPERATURE,
-    NTC_B_VALUE,
-    STM32_ANALOG_RESOLUTION // <- for a thermistor calibration
-  );
 
   //Set port for beeper
   pinMode(BEEPER_PIN, OUTPUT);
@@ -292,191 +252,30 @@ void loop() {
 }
 
 
-
-void TDSSensorCallback()
-{
-  Serial.println("TDS sensor measure...");
-  gravityTds.setTemperature(temperature);  // set the temperature and execute temperature compensation
-  gravityTds.update();  //sample and calculate
-  tdsValue = gravityTds.getTdsValue();  // then get the value
-  Serial.print("Received value: ");
-  Serial.print(tdsValue);
-  Serial.println(" ppm");
-    
-  IWatchdog.reload();
-}
-
-void FLowMeterCallback()
-{
-  Serial.println("Read data from Input Counter Hardware Timer...");
-  WaterConsumption = WaterConsumption + GetFlowCounter();
-  WaterConsumptionFilter1 = WaterConsumptionFilter1 + GetFlowCounter();
-  WaterConsumptionFilter2 = WaterConsumptionFilter2 + GetFlowCounter();
-  WaterConsumptionFilter3 = WaterConsumptionFilter3 + GetFlowCounter();
-  Serial.print("Received value: ");
-  Serial.print(WaterConsumption);
-  Serial.println(" L");
-
-  IWatchdog.reload();
-}
-
-void TemperatureSensorCallback()
-{
-  Serial.println("NTC sensor measure...");
-  temperature = thermistor->readCelsius();
-  Serial.print("Received value: ");
-  Serial.print(temperature);
-  Serial.println(" C");
-
-  IWatchdog.reload();
-}
-
 void MQTTMessageCallback()
 {
+  char MessageBuf[16];
   //Publish MQTT messages
   Serial.println("Publishing MQTT messages...");
   //try to publiosh first message
-  sprintf(DisplayBuf, "%2.3f", temperature);
-  if (!publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTTempTopicState, DisplayBuf))
+  sprintf(MessageBuf, "%2.3f", temperature);
+  if (!publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTTempTopicState, MessageBuf))
   {
     runner.disableAll();   //pause runner and wait for watchdog if MQTT is broken
   }
   else {
     //keep publishing rest of messages
-    sprintf(DisplayBuf, "%2.3f", tdsValue);
-    publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTTDSTopicState, DisplayBuf);
-    sprintf(DisplayBuf, "%" PRIu64, WaterConsumption / 1000);
-    publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTFlowTopicState, DisplayBuf);
-    sprintf(DisplayBuf, "%" PRIu64, WaterConsumptionFilter1 / 1000);
-    publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTFilter1TopicConfig, DisplayBuf);
-    sprintf(DisplayBuf, "%" PRIu64, WaterConsumptionFilter2 / 1000);
-    publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTFilter2TopicConfig, DisplayBuf);
-    sprintf(DisplayBuf, "%" PRIu64, WaterConsumptionFilter3 / 1000);
+    sprintf(MessageBuf, "%2.3f", tdsValue);
+    publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTTDSTopicState, MessageBuf);
+    sprintf(MessageBuf, "%" PRIu64, EEPROMData.WaterConsumption / 1000);
+    publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTFlowTopicState, MessageBuf);
+    sprintf(MessageBuf, "%" PRIu64, EEPROMData.WaterConsumptionFilter1 / 1000);
+    publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTFilter1TopicConfig, MessageBuf);
+    sprintf(MessageBuf, "%" PRIu64, EEPROMData.WaterConsumptionFilter2 / 1000);
+    publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTFilter2TopicConfig, MessageBuf);
+    sprintf(MessageBuf, "%" PRIu64, EEPROMData.WaterConsumptionFilter3 / 1000);
     Serial.println("Done");
   }
-}
-
-void DisplayControlCallback()
-{
-  char Title[16];
-  switch(DisplayState)
-  {
-    case DisplayView::Temperature:
-    {
-      strcpy(Title, "Temperature, C:");
-      sprintf(DisplayBuf, "%2.3f", temperature);
-      clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
-      DisplayState++;
-      break;
-    }
-    case DisplayView::TDS:
-    {
-      strcpy(Title, "Water TDS, ppm:");
-      sprintf(DisplayBuf, "%2.3f", tdsValue);
-      clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
-      DisplayState++;
-      break;
-    }
-    case DisplayView::Consumption:
-    {
-      strcpy(Title, "Consumption, L:");
-      sprintf(DisplayBuf, "%" PRIu64, WaterConsumption / 1000);
-      clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
-      DisplayState++;
-      break;
-    }
-    case DisplayView::Filter1:
-    {
-      strcpy(Title, "Filter 1, L:");
-      sprintf(DisplayBuf, "%" PRIu64, WaterConsumptionFilter1 / 1000);
-      clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
-      DisplayState++;
-      break;
-    }
-    case DisplayView::Filter2:
-    {
-      strcpy(Title, "Filter 2, L:");
-      sprintf(DisplayBuf, "%" PRIu64, WaterConsumptionFilter2 / 1000);
-      clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
-      DisplayState++;
-      break;
-    }
-    case DisplayView::Filter3:
-    {
-      strcpy(Title, "Filter 3, L:");
-      sprintf(DisplayBuf, "%" PRIu64, WaterConsumptionFilter3 / 1000);
-      clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
-      DisplayState = 0;
-      break;
-    }
-    case DisplayView::Reset1:
-    {
-      strcpy(Title, "Reset Filter 1?");
-      strcpy(DisplayBuf, "NO          YES");
-      clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
-      break;
-    }
-    case DisplayView::Reset2:
-    {
-      strcpy(Title, "Reset Filter 2?");
-      strcpy(DisplayBuf, "NO          YES");
-      clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
-      break;
-    }
-    case DisplayView::Reset3:
-    {
-      strcpy(Title, "Reset Filter 3?");
-      strcpy(DisplayBuf, "NO          YES");
-      clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
-      break;
-    }
-    case DisplayView::Cancel:
-    {
-      strcpy(Title, "Canceled");
-      clearLCD();
-      printLCD(1, Title);
-      DisplayState = 0;
-      break;
-    }
-    case DisplayView::Done:
-    {
-      strcpy(Title, "Done");
-      clearLCD();
-      printLCD(1, Title);
-      DisplayState = 0;
-      break;
-    }
-  }
-
-  //resume display loop after timeout
-  if (!DisplayControl.isEnabled())
-  {
-    DisplayControlRestart.enableDelayed(60);
-  }
-}
-
-void DisplayControlRestartCallback()
-{
-  DisplayState = 0;
-  DisplayControl.enable();
 }
 
 void ButtonsUpdateCallback()
@@ -512,18 +311,52 @@ void button2ISR()
 
 void Button1Handler()
 {
-  //pause loop in a display
-  DisplayControl.disable();
-
-  if (DisplayState == 6)
+  switch(DisplayState)
   {
-    DisplayState = 7;
-    DisplayControlCallback();
+    case DisplayView::Reset1:
+    {
+      DisplayControl.disable();
+      DisplayState = 7;
+      DisplayControlCallback();
+      DisplayState = 0;
+      DisplayControl.enableDelayed(90);
+    }
+    case DisplayView::Reset2:
+    {
+      DisplayControl.disable();
+      DisplayState = 7;
+      DisplayControlCallback();
+      DisplayState = 0;
+      DisplayControl.enableDelayed(90);
+    }
+    case DisplayView::Reset3:
+    {
+      DisplayControl.disable();
+      DisplayState = 7;
+      DisplayControlCallback();
+      DisplayState = 0;
+      DisplayControl.enableDelayed(90);
+    }
+    case DisplayView::Cancel:
+    {
+      DisplayControl.disable();
+      DisplayState = 7;
+      DisplayControlCallback();
+      DisplayState = 0;
+      DisplayControl.enableDelayed(90);
+    }
+    case DisplayView::Done:
+    {
+      DisplayControl.disable();
+      DisplayState = 0;
+      DisplayControlCallback();
+      DisplayControl.enableDelayed(90);
+    }
+    default:
+    {
+      DisplayControlCallback();
+    }
   }
-  else {
-    DisplayControlCallback();
-  }
-  DisplayControl.enableDelayed(60);
 }
 
 
@@ -567,21 +400,21 @@ void Button2Handler()
   {
     case DisplayView::Reset1:
     {
-      WaterConsumptionFilter1 = 0;
+      EEPROMData.WaterConsumptionFilter1 = 0;
       DisplayState = 7;
       DisplayControlCallback();
       break;
     }
     case DisplayView::Reset2:
     {
-      WaterConsumptionFilter2 = 0;
+      EEPROMData.WaterConsumptionFilter2 = 0;
       DisplayState = 7;
       DisplayControlCallback();
       break;
     }
     case DisplayView::Reset3:
     {
-      WaterConsumptionFilter3 = 0;
+      EEPROMData.WaterConsumptionFilter3 = 0;
       DisplayState = 7;
       DisplayControlCallback();
       break;
