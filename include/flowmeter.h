@@ -17,19 +17,19 @@ void FlowMeterInit(void);
 void NTCSensorInit(void);
 void TDSSensorInit(void);
 
-uint64_t GetFlowCounter(void);
+uint32_t GetFlowCounter(void);
 
 extern float tdsValue;
 extern float temperature;
 
 struct FlowMeterData {
-  uint64_t WaterConsumption = 0;
-  uint64_t WaterConsumptionFilter1 = 0;
-  uint64_t WaterConsumptionFilter2 = 0;
-  uint64_t WaterConsumptionFilter3 = 0;
+  uint32_t WaterConsumption;
+  uint32_t WaterConsumptionFilter1;
+  uint32_t WaterConsumptionFilter2;
+  uint32_t WaterConsumptionFilter3;
 };
 
-extern FlowMeterData EEPROMData;
+extern struct FlowMeterData ActualData;
 
 void FLowMeterCallback();
 

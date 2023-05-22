@@ -55,7 +55,7 @@ void DisplayControlCallback()
     case DisplayView::Consumption:
     {
       strcpy(Title, "Consumption, L:");
-      sprintf(DisplayBuf, "%" PRIu64, EEPROMData.WaterConsumption / 1000);
+      sprintf(DisplayBuf, "%" PRIu64, ActualData.WaterConsumption / 1000);
       clearLCD();
       printLCD(1, Title);
       printLCD(2, DisplayBuf);
@@ -65,7 +65,7 @@ void DisplayControlCallback()
     case DisplayView::Filter1:
     {
       strcpy(Title, "Filter 1, L:");
-      sprintf(DisplayBuf, "%" PRIu64, EEPROMData.WaterConsumptionFilter1 / 1000);
+      sprintf(DisplayBuf, "%" PRIu64, ActualData.WaterConsumptionFilter1 / 1000);
       clearLCD();
       printLCD(1, Title);
       printLCD(2, DisplayBuf);
@@ -75,7 +75,7 @@ void DisplayControlCallback()
     case DisplayView::Filter2:
     {
       strcpy(Title, "Filter 2, L:");
-      sprintf(DisplayBuf, "%" PRIu64, EEPROMData.WaterConsumptionFilter2 / 1000);
+      sprintf(DisplayBuf, "%" PRIu64, ActualData.WaterConsumptionFilter2 / 1000);
       clearLCD();
       printLCD(1, Title);
       printLCD(2, DisplayBuf);
@@ -85,7 +85,7 @@ void DisplayControlCallback()
     case DisplayView::Filter3:
     {
       strcpy(Title, "Filter 3, L:");
-      sprintf(DisplayBuf, "%" PRIu64, EEPROMData.WaterConsumptionFilter3 / 1000);
+      sprintf(DisplayBuf, "%" PRIu64, ActualData.WaterConsumptionFilter3 / 1000);
       clearLCD();
       printLCD(1, Title);
       printLCD(2, DisplayBuf);

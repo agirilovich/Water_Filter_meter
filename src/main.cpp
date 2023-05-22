@@ -60,6 +60,8 @@ void Button2HandlerLong();
 
 #include "lcd.h"
 
+#include "storage.h"
+
 #include "controlWiFi.h" 
 WiFiClient client;
 
@@ -129,6 +131,9 @@ void setup() {
 
   //setup NTC sensor
   NTCSensorInit();
+
+  //Initialise EEPROM flash module and backup registry
+  BackupInit();
 
   Serial.print(F("\nStart WiFiMQTT on "));
   Serial.print(DEVICE_BOARD_NAME);
@@ -267,13 +272,13 @@ void MQTTMessageCallback()
     //keep publishing rest of messages
     sprintf(MessageBuf, "%2.3f", tdsValue);
     publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTTDSTopicState, MessageBuf);
-    sprintf(MessageBuf, "%" PRIu64, EEPROMData.WaterConsumption / 1000);
+    sprintf(MessageBuf, "%" PRIu64, ActualData.WaterConsumption / 1000);
     publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTFlowTopicState, MessageBuf);
-    sprintf(MessageBuf, "%" PRIu64, EEPROMData.WaterConsumptionFilter1 / 1000);
+    sprintf(MessageBuf, "%" PRIu64, ActualData.WaterConsumptionFilter1 / 1000);
     publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTFilter1TopicConfig, MessageBuf);
-    sprintf(MessageBuf, "%" PRIu64, EEPROMData.WaterConsumptionFilter2 / 1000);
+    sprintf(MessageBuf, "%" PRIu64, ActualData.WaterConsumptionFilter2 / 1000);
     publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTFilter2TopicConfig, MessageBuf);
-    sprintf(MessageBuf, "%" PRIu64, EEPROMData.WaterConsumptionFilter3 / 1000);
+    sprintf(MessageBuf, "%" PRIu64, ActualData.WaterConsumptionFilter3 / 1000);
     Serial.println("Done");
   }
 }
@@ -400,21 +405,21 @@ void Button2Handler()
   {
     case DisplayView::Reset1:
     {
-      EEPROMData.WaterConsumptionFilter1 = 0;
+      ActualData.WaterConsumptionFilter1 = 0;
       DisplayState = 7;
       DisplayControlCallback();
       break;
     }
     case DisplayView::Reset2:
     {
-      EEPROMData.WaterConsumptionFilter2 = 0;
+      ActualData.WaterConsumptionFilter2 = 0;
       DisplayState = 7;
       DisplayControlCallback();
       break;
     }
     case DisplayView::Reset3:
     {
-      EEPROMData.WaterConsumptionFilter3 = 0;
+      ActualData.WaterConsumptionFilter3 = 0;
       DisplayState = 7;
       DisplayControlCallback();
       break;

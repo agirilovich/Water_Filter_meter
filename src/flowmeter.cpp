@@ -8,14 +8,14 @@ GravityTDS gravityTds;
 float tdsValue = 0;
 float temperature = NTC_NOMINAL_TEMPERATURE;
 
+struct FlowMeterData ActualData = {0, 0, 0, 0};
+
 uint32_t channel;
 volatile uint32_t LastCapture = 0, CurrentCapture, PulseCounter = 0;
 volatile uint32_t rolloverCompareCount = 0;
 const float FlowPulseCharacteristics = 1/(60*13);
 
 HardwareTimer *FlowTimer;
-
-struct FlowMeterData EEPROMData;
 
 Thermistor* thermistor;
 
@@ -69,9 +69,9 @@ void FlowMeterInit(void)
   FlowTimer->resume();
 }
 
-uint64_t GetFlowCounter(void)
+uint32_t GetFlowCounter(void)
 {
-  uint64_t CurrentFlow;
+  uint32_t CurrentFlow;
   FlowTimer->pauseChannel(channel);
   InputCapture_callback();
   CurrentFlow = PulseCounter * FlowPulseCharacteristics;
@@ -84,15 +84,15 @@ uint64_t GetFlowCounter(void)
 
 void FLowMeterCallback()
 {
-  uint64_t CurrentFlow;
+  uint32_t CurrentFlow;
   Serial.println("Read data from Input Counter Hardware Timer...");
   CurrentFlow = GetFlowCounter();
-  EEPROMData.WaterConsumption = EEPROMData.WaterConsumption + CurrentFlow;
-  EEPROMData.WaterConsumptionFilter1 = EEPROMData.WaterConsumptionFilter1 + CurrentFlow;
-  EEPROMData.WaterConsumptionFilter2 = EEPROMData.WaterConsumptionFilter2 + CurrentFlow;
-  EEPROMData.WaterConsumptionFilter3 = EEPROMData.WaterConsumptionFilter3 + CurrentFlow;
+  ActualData.WaterConsumption = ActualData.WaterConsumption + CurrentFlow;
+  ActualData.WaterConsumptionFilter1 = ActualData.WaterConsumptionFilter1 + CurrentFlow;
+  ActualData.WaterConsumptionFilter2 = ActualData.WaterConsumptionFilter2 + CurrentFlow;
+  ActualData.WaterConsumptionFilter3 = ActualData.WaterConsumptionFilter3 + CurrentFlow;
   Serial.print("Received value: ");
-  Serial.print(EEPROMData.WaterConsumption);
+  Serial.print(ActualData.WaterConsumption);
   Serial.println(" L");
 }
 
