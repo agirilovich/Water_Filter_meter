@@ -65,6 +65,11 @@ void Button2HandlerLong();
 #include "controlWiFi.h" 
 WiFiClient client;
 
+#include <NTPClient.h>
+WiFiEspAtUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "europe.pool.ntp.org");
+
+
 #include "MQTT_task.h"
 PubSubClient mqtt(client);
 
@@ -112,6 +117,8 @@ Task TempThread(10 * TASK_SECOND, TASK_FOREVER, &TDSSensorCallback, &runner, fal
 Task mqttThread(5 * TASK_MINUTE, TASK_FOREVER, &MQTTMessageCallback, &runner, false);  //Runs every 5 minutes after several measurements of Ultrasonic Sensor
 Task DisplayControl(10 * TASK_SECOND, TASK_FOREVER, &DisplayControlCallback, &runner, false);
 Task ButtonsUpdate(1 * TASK_SECOND, TASK_FOREVER, &ButtonsUpdateCallback, &runner, false);
+Task BackupRTC(1 * TASK_MINUTE, TASK_FOREVER, &BackupRTCPut, &runner, false);
+Task BackupEEPROM(1 * TASK_HOUR, TASK_FOREVER, &BackupEEPROMPut, &runner, false);
 
 void setup() {
   // Debug console
@@ -131,9 +138,6 @@ void setup() {
 
   //setup NTC sensor
   NTCSensorInit();
-
-  //Initialise EEPROM flash module and backup registry
-  BackupInit();
 
   Serial.print(F("\nStart WiFiMQTT on "));
   Serial.print(DEVICE_BOARD_NAME);
@@ -244,6 +248,14 @@ void setup() {
   button2.begin();
   button2.enableInterrupt(button2ISR);
   button2.onPressedFor(5000, Button2HandlerLong);
+
+  //SYNC RTC with NTP
+  timeClient.begin();
+  RTCInit(timeClient.getEpochTime());
+  
+  //Initialise EEPROM flash module, backup registry and restore saved values
+  BackupInit();
+  BackupGet();
 
   runner.setHighPriorityScheduler(&HPRrunner);
   runner.enableAll(true);
