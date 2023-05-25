@@ -11,9 +11,10 @@ void initializeLCD(void)
 {
   lcd.begin(16, 2);
   // Print a message to the LCD.
-  lcd.print("Initialising LCD....");
-  delay(50);
-  lcd.clear();
+  lcd.print("Initializing LCD....");
+  lcd.setCursor(0,1);
+  lcd.print("Done");
+  
 }
 
 void printLCD(int line, char *text)
@@ -37,8 +38,8 @@ void DisplayControlCallback()
       strcpy(Title, "Temperature, C:");
       sprintf(DisplayBuf, "%2.3f", temperature);
       clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
+      printLCD(0, Title);
+      printLCD(1, DisplayBuf);
       DisplayState++;
       break;
     }
@@ -47,8 +48,8 @@ void DisplayControlCallback()
       strcpy(Title, "Water TDS, ppm:");
       sprintf(DisplayBuf, "%2.3f", tdsValue);
       clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
+      printLCD(0, Title);
+      printLCD(1, DisplayBuf);
       DisplayState++;
       break;
     }
@@ -57,8 +58,8 @@ void DisplayControlCallback()
       strcpy(Title, "Consumption, L:");
       sprintf(DisplayBuf, "%" PRIu64, ActualData.WaterConsumption / 1000);
       clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
+      printLCD(0, Title);
+      printLCD(1, DisplayBuf);
       DisplayState++;
       break;
     }
@@ -67,8 +68,8 @@ void DisplayControlCallback()
       strcpy(Title, "Filter 1, L:");
       sprintf(DisplayBuf, "%" PRIu64, ActualData.WaterConsumptionFilter1 / 1000);
       clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
+      printLCD(0, Title);
+      printLCD(1, DisplayBuf);
       DisplayState++;
       break;
     }
@@ -77,8 +78,8 @@ void DisplayControlCallback()
       strcpy(Title, "Filter 2, L:");
       sprintf(DisplayBuf, "%" PRIu64, ActualData.WaterConsumptionFilter2 / 1000);
       clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
+      printLCD(0, Title);
+      printLCD(1, DisplayBuf);
       DisplayState++;
       break;
     }
@@ -87,8 +88,8 @@ void DisplayControlCallback()
       strcpy(Title, "Filter 3, L:");
       sprintf(DisplayBuf, "%" PRIu64, ActualData.WaterConsumptionFilter3 / 1000);
       clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
+      printLCD(0, Title);
+      printLCD(1, DisplayBuf);
       DisplayState = 0;
       break;
     }
@@ -97,8 +98,8 @@ void DisplayControlCallback()
       strcpy(Title, "Reset Filter 1?");
       strcpy(DisplayBuf, "NO          YES");
       clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
+      printLCD(0, Title);
+      printLCD(1, DisplayBuf);
       break;
     }
     case DisplayView::Reset2:
@@ -106,8 +107,8 @@ void DisplayControlCallback()
       strcpy(Title, "Reset Filter 2?");
       strcpy(DisplayBuf, "NO          YES");
       clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
+      printLCD(0, Title);
+      printLCD(1, DisplayBuf);
       break;
     }
     case DisplayView::Reset3:
@@ -115,15 +116,15 @@ void DisplayControlCallback()
       strcpy(Title, "Reset Filter 3?");
       strcpy(DisplayBuf, "NO          YES");
       clearLCD();
-      printLCD(1, Title);
-      printLCD(2, DisplayBuf);
+      printLCD(0, Title);
+      printLCD(1, DisplayBuf);
       break;
     }
     case DisplayView::Cancel:
     {
       strcpy(Title, "Canceled");
       clearLCD();
-      printLCD(1, Title);
+      printLCD(0, Title);
       DisplayState = 0;
       break;
     }
@@ -131,7 +132,7 @@ void DisplayControlCallback()
     {
       strcpy(Title, "Done");
       clearLCD();
-      printLCD(1, Title);
+      printLCD(0, Title);
       DisplayState = 0;
       break;
     }

@@ -6,7 +6,8 @@
 #include <I2C_eeprom_cyclic_store.h>
 #include <backup.h>
 
-I2C_eeprom ee(0x50, MEMORY_SIZE);
+TwoWire Wire1(PB9, PB8);
+I2C_eeprom ee(0x50, I2C_DEVICESIZE_24LC256, &Wire1);
 I2C_eeprom_cyclic_store<FlowMeterData> flash_mem;
 
 
@@ -15,7 +16,7 @@ void BackupInit()
   ee.begin();
   if (ee.isConnected())
   {
-    flash_mem.begin(ee, PAGE_SIZE, MEMORY_SIZE/PAGE_SIZE);
+    flash_mem.begin(ee, PAGE_SIZE, I2C_DEVICESIZE_24LC256/PAGE_SIZE);
     uint16_t slots;
     uint32_t writes;
     flash_mem.getMetrics(slots, writes);
@@ -31,13 +32,19 @@ void BackupInit()
   enableBackupDomain();
 }
 
-void BackupPut()
+void BackupEEPROMPut()
 {
   flash_mem.write(ActualData);
-  setBackupRegister(0, ActualData.WaterConsumption);
-  setBackupRegister(1, ActualData.WaterConsumptionFilter1);
-  setBackupRegister(2, ActualData.WaterConsumptionFilter2);
-  setBackupRegister(3, ActualData.WaterConsumptionFilter3);
+}
+
+
+void BackupRTCPut()
+{
+  setBackupRegister(0, ActualData.TimeStamp);
+  setBackupRegister(1, ActualData.WaterConsumption);
+  setBackupRegister(2, ActualData.WaterConsumptionFilter1);
+  setBackupRegister(3, ActualData.WaterConsumptionFilter2);
+  setBackupRegister(4, ActualData.WaterConsumptionFilter3);
 }
 
 void BackupGet()
@@ -53,4 +60,14 @@ void BackupGet()
   ActualData.WaterConsumptionFilter1 = RTCData.WaterConsumptionFilter1 >= EEPROMData.WaterConsumptionFilter1 ? RTCData.WaterConsumptionFilter1 : EEPROMData.WaterConsumptionFilter1;
   ActualData.WaterConsumptionFilter2 = RTCData.WaterConsumptionFilter2 >= EEPROMData.WaterConsumptionFilter2 ? RTCData.WaterConsumptionFilter2 : EEPROMData.WaterConsumptionFilter2;
   ActualData.WaterConsumptionFilter3 = RTCData.WaterConsumptionFilter3 >= EEPROMData.WaterConsumptionFilter3 ? RTCData.WaterConsumptionFilter3 : EEPROMData.WaterConsumptionFilter3;
+  Serial.println("Stored in EEPROM values:");
+  Serial.println(EEPROMData.WaterConsumption);
+  Serial.println(EEPROMData.WaterConsumptionFilter1);
+  Serial.println(EEPROMData.WaterConsumptionFilter2);
+  Serial.println(EEPROMData.WaterConsumptionFilter3);
+  Serial.println("Stored in RTC values:");
+  Serial.println(RTCData.WaterConsumption);
+  Serial.println(RTCData.WaterConsumptionFilter1);
+  Serial.println(RTCData.WaterConsumptionFilter2);
+  Serial.println(RTCData.WaterConsumptionFilter3);
 }

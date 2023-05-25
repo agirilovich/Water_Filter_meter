@@ -6,7 +6,7 @@ void initializeMQTT(PubSubClient mqtt, const char *mqtt_user, const char *mqtt_p
 {
 
   Serial.print("Testing connection to mqtt broker...");
-
+  
   while (!mqtt.connect(DEVICE_BOARD_NAME, mqtt_user, mqtt_pass))
   {
     Serial.print(".");
@@ -17,7 +17,8 @@ void initializeMQTT(PubSubClient mqtt, const char *mqtt_user, const char *mqtt_p
     Serial.println(" connected!");
   } 
 
-  Serial.println("Initialise MQTT autodiscovery topic and sensor...");
+  Serial.println("Initialise MQTT autodiscovery topics and sensors...");
+  Serial.println(Topic);
 
   //Publish message to AutoDiscovery topic
   if (mqtt.publish(Topic, SensorConfig, true)) {

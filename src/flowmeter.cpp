@@ -47,6 +47,7 @@ void Rollover_callback(void)
 
 void FlowMeterInit(void)
 {
+  Serial.println("Initialise Flow Meter Counter...");
   // Automatically retrieve TIM instance and channel associated to pin
   TIM_TypeDef *Instance = (TIM_TypeDef *)pinmap_peripheral(digitalPinToPinName(FlowSensorPin), PinMap_PWM);
   channel = STM_PIN_CHANNEL(pinmap_function(digitalPinToPinName(FlowSensorPin), PinMap_PWM));
@@ -67,6 +68,7 @@ void FlowMeterInit(void)
   Serial.println(FlowTimer->getTimerClkFreq() / FlowTimer->getPrescaleFactor());
 
   FlowTimer->resume();
+
 }
 
 uint32_t GetFlowCounter(void)
@@ -99,6 +101,7 @@ void FLowMeterCallback()
 
 void NTCSensorInit(void)
 {
+  Serial.println("Initialise NTC Sensor");
   thermistor = new NTC_Thermistor(
     NTC_SENSOR_PIN,
     NTC_REFERENCE_RESISTANCE,
@@ -120,6 +123,7 @@ void TemperatureSensorCallback()
 
 void TDSSensorInit(void)
 {
+  Serial.println("Initialise TDS Sensor");
   gravityTds.setPin(TdsSensorPin);
   gravityTds.setAref(5.0);  //reference voltage on ADC, default 5.0V on Arduino UNO
   gravityTds.setAdcRange(4096);  //1024 for 10bit ADC;4096 for 12bit ADC

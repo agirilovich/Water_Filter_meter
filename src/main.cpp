@@ -89,7 +89,7 @@ const char *MQTTFlowTopicStateFilter3 = MQTT_FILTER1_TOPIC_STATE;
 #include <ArduinoJson.h>
 
 StaticJsonDocument<512> JsonSensorConfig;
-char Buffer[256];
+char Buffer[1024];
 
 //Multitask definitions
 #define _TASK_PRIORITY
@@ -100,30 +100,45 @@ char Buffer[256];
 //load all the objects about water meter
 #include "flowmeter.h"
 
-Scheduler HPRrunner; //high priority scheduler
 Scheduler runner; //normal priority scheduler
 
 void MQTTMessageCallback();
 void ButtonsUpdateCallback();
 
 Task TDSThread(1 * TASK_MINUTE, TASK_FOREVER, &TDSSensorCallback, &runner, false);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
-Task FlowThread(1 * TASK_MINUTE, TASK_FOREVER, &FLowMeterCallback, &HPRrunner, false);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
-Task TempThread(10 * TASK_SECOND, TASK_FOREVER, &TDSSensorCallback, &runner, false);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
+Task FlowThread(1 * TASK_MINUTE, TASK_FOREVER, &FLowMeterCallback, &runner, false);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
+Task TempThread(10 * TASK_SECOND, TASK_FOREVER, &TemperatureSensorCallback, &runner, false);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
 Task mqttThread(5 * TASK_MINUTE, TASK_FOREVER, &MQTTMessageCallback, &runner, false);  //Runs every 5 minutes after several measurements of Ultrasonic Sensor
 Task DisplayControl(10 * TASK_SECOND, TASK_FOREVER, &DisplayControlCallback, &runner, false);
+Task EEPROMSTORE(10 * TASK_MINUTE, TASK_FOREVER, &BackupRTCPut, &runner, false);
+Task RTCStore(1 * TASK_HOUR, TASK_FOREVER, &BackupEEPROMPut, &runner, false);
 Task ButtonsUpdate(1 * TASK_SECOND, TASK_FOREVER, &ButtonsUpdateCallback, &runner, false);
 
 void setup() {
   // Debug console
   Serial.begin(115200);
 
-  while (!Serial && millis() < 5000);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, HIGH);
 
-  IWatchdog.begin(60*1000000);
+  while (!Serial && millis() < 5000);
 
   if (IWatchdog.isReset()) {
     Serial.printf("Rebooted by Watchdog!\n");
-    IWatchdog.clearReset();
+    delay(60 * 1000);
+    IWatchdog.clearReset(); 
+  }
+
+  //Set witchdog timeout for 32 seconds
+  IWatchdog.begin(32000000); // set to maximum value
+  IWatchdog.reload();
+
+  while (!IWatchdog.isEnabled()) {
+    // LED blinks indefinitely
+    digitalWrite(LED_PIN, LOW);
+    delay(500);
+    digitalWrite(LED_PIN, HIGH);
+    delay(500);
   }
 
   //initialise LCD
@@ -131,6 +146,13 @@ void setup() {
 
   //setup NTC sensor
   NTCSensorInit();
+
+  //Set port for beeper
+  Serial.print("Test beep signal");
+  pinMode(BEEPER_PIN, OUTPUT);
+  digitalWrite(BEEPER_PIN, HIGH);
+  delay(50);
+  digitalWrite(BEEPER_PIN, LOW);
 
   //Initialise EEPROM flash module and backup registry
   BackupInit();
@@ -235,9 +257,6 @@ void setup() {
   //setup flow meter
   FlowMeterInit();
 
-  //Set port for beeper
-  pinMode(BEEPER_PIN, OUTPUT);
-
   button1.begin();
   button1.enableInterrupt(button1ISR);
   button1.onPressed(Button1Handler);
@@ -245,7 +264,6 @@ void setup() {
   button2.enableInterrupt(button2ISR);
   button2.onPressedFor(5000, Button2HandlerLong);
 
-  runner.setHighPriorityScheduler(&HPRrunner);
   runner.enableAll(true);
 
   //runner.startNow();  // This creates a new scheduling starting point for all ACTIVE tasks.
@@ -287,6 +305,7 @@ void ButtonsUpdateCallback()
 {
   button1.update();
   button2.update();
+  IWatchdog.reload();
 }
 
 void button1ISR()
@@ -408,6 +427,7 @@ void Button2Handler()
       ActualData.WaterConsumptionFilter1 = 0;
       DisplayState = 7;
       DisplayControlCallback();
+      BackupRTCPut();
       break;
     }
     case DisplayView::Reset2:
@@ -415,6 +435,7 @@ void Button2Handler()
       ActualData.WaterConsumptionFilter2 = 0;
       DisplayState = 7;
       DisplayControlCallback();
+      BackupRTCPut();
       break;
     }
     case DisplayView::Reset3:
@@ -422,6 +443,7 @@ void Button2Handler()
       ActualData.WaterConsumptionFilter3 = 0;
       DisplayState = 7;
       DisplayControlCallback();
+      BackupRTCPut();
       break;
     }
     default:
@@ -430,4 +452,5 @@ void Button2Handler()
       DisplayControlCallback();
     }
   }
+  DisplayControl.enableDelayed(30);
 }
