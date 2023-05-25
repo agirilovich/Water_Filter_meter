@@ -65,6 +65,11 @@ void Button2HandlerLong();
 #include "controlWiFi.h" 
 WiFiClient client;
 
+#include <NTPClient.h>
+WiFiEspAtUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "europe.pool.ntp.org");
+
+
 #include "MQTT_task.h"
 PubSubClient mqtt(client);
 
@@ -110,9 +115,10 @@ Task FlowThread(1 * TASK_MINUTE, TASK_FOREVER, &FLowMeterCallback, &runner, fals
 Task TempThread(10 * TASK_SECOND, TASK_FOREVER, &TemperatureSensorCallback, &runner, false);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
 Task mqttThread(5 * TASK_MINUTE, TASK_FOREVER, &MQTTMessageCallback, &runner, false);  //Runs every 5 minutes after several measurements of Ultrasonic Sensor
 Task DisplayControl(10 * TASK_SECOND, TASK_FOREVER, &DisplayControlCallback, &runner, false);
-Task EEPROMSTORE(10 * TASK_MINUTE, TASK_FOREVER, &BackupRTCPut, &runner, false);
-Task RTCStore(1 * TASK_HOUR, TASK_FOREVER, &BackupEEPROMPut, &runner, false);
+Task RTCStore(10 * TASK_MINUTE, TASK_FOREVER, &BackupRTCPut, &runner, false);
+Task EEPROMStore(1 * TASK_HOUR, TASK_FOREVER, &BackupEEPROMPut, &runner, false);
 Task ButtonsUpdate(1 * TASK_SECOND, TASK_FOREVER, &ButtonsUpdateCallback, &runner, false);
+
 
 void setup() {
   // Debug console
@@ -263,6 +269,14 @@ void setup() {
   button2.begin();
   button2.enableInterrupt(button2ISR);
   button2.onPressedFor(5000, Button2HandlerLong);
+
+  //SYNC RTC with NTP
+  timeClient.begin();
+  RTCInit(timeClient.getEpochTime());
+  
+  //Initialise EEPROM flash module, backup registry and restore saved values
+  BackupInit();
+  BackupGet();
 
   runner.enableAll(true);
 

@@ -23,7 +23,7 @@ extern float tdsValue;
 extern float temperature;
 
 struct FlowMeterData {
-  uint32_t TimeStamp;
+  uint32_t Timestamp;
   uint32_t WaterConsumption;
   uint32_t WaterConsumptionFilter1;
   uint32_t WaterConsumptionFilter2;
