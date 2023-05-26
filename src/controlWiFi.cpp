@@ -13,13 +13,13 @@ void printWifiStatus()
   Serial.println(WiFi.localIP());
 
   Serial.print(F("SSID: "));
-  Serial.print(WiFi.SSID());
+  Serial.println(WiFi.SSID());
 
   // print the received signal strength:
   int32_t rssi = WiFi.RSSI();
-  Serial.print(F(", Signal strength (RSSI):"));
+  Serial.print("Signal strength (RSSI): ");
   Serial.print(rssi);
-  Serial.println(F(" dBm"));
+  Serial.println(" dBm");
 }
 
 void initializeWiFiShield(const char *device_name)

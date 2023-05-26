@@ -13,6 +13,8 @@
 
 #define TdsSensorPin PB1
 
+#define TDSArrayLenght 50
+
 void FlowMeterInit(void);
 void NTCSensorInit(void);
 void TDSSensorInit(void);

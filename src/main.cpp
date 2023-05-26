@@ -49,9 +49,9 @@ const char *mqtt_pass = mqtt_password;
 
 
 //objects for button processing
-#include <EasyButton.h>
-EasyButton button1(BUTTON_PIN_1);
-EasyButton button2(BUTTON_PIN_2);
+#include <OneButton.h>
+OneButton button1(BUTTON_PIN_1, true, false);
+OneButton button2(BUTTON_PIN_2, true, false);
 void button1ISR();
 void button2ISR();
 void Button1Handler();
@@ -67,7 +67,7 @@ WiFiClient client;
 
 #include <NTPClient.h>
 WiFiEspAtUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "europe.pool.ntp.org");
+NTPClient timeClient(ntpUDP, "pl.pool.ntp.org");
 
 
 #include "MQTT_task.h"
@@ -109,15 +109,17 @@ Scheduler runner; //normal priority scheduler
 
 void MQTTMessageCallback();
 void ButtonsUpdateCallback();
+void Delayer();
 
-Task TDSThread(1 * TASK_MINUTE, TASK_FOREVER, &TDSSensorCallback, &runner, false);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
-Task FlowThread(1 * TASK_MINUTE, TASK_FOREVER, &FLowMeterCallback, &runner, false);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
-Task TempThread(10 * TASK_SECOND, TASK_FOREVER, &TemperatureSensorCallback, &runner, false);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
-Task mqttThread(5 * TASK_MINUTE, TASK_FOREVER, &MQTTMessageCallback, &runner, false);  //Runs every 5 minutes after several measurements of Ultrasonic Sensor
-Task DisplayControl(10 * TASK_SECOND, TASK_FOREVER, &DisplayControlCallback, &runner, false);
-Task RTCStore(10 * TASK_MINUTE, TASK_FOREVER, &BackupRTCPut, &runner, false);
-Task EEPROMStore(1 * TASK_HOUR, TASK_FOREVER, &BackupEEPROMPut, &runner, false);
-Task ButtonsUpdate(1 * TASK_SECOND, TASK_FOREVER, &ButtonsUpdateCallback, &runner, false);
+Task TDSThread(1 * TASK_MINUTE, TASK_FOREVER, &TDSSensorCallback, &runner, true);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
+Task FlowThread(1 * TASK_MINUTE, TASK_FOREVER, &FLowMeterCallback, &runner, true);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
+Task TempThread(10 * TASK_SECOND, TASK_FOREVER, &TemperatureSensorCallback, &runner, true);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
+Task DisplayControl(10 * TASK_SECOND, TASK_FOREVER, &DisplayControlCallback, &runner, true);
+Task ButtonsUpdate(1 * TASK_SECOND, TASK_FOREVER, &ButtonsUpdateCallback, &runner, true);
+Task ThreadDelay(0, TASK_ONCE, &Delayer, &runner, true);  //Delay for first run of MQTT publisher and store.
+Task mqttThread(5 * TASK_MINUTE, TASK_FOREVER, &MQTTMessageCallback);
+Task RTCStore(10 * TASK_MINUTE, TASK_FOREVER, &BackupRTCPut);
+Task EEPROMStore(1 * TASK_HOUR, TASK_FOREVER, &BackupEEPROMPut);
 
 
 void setup() {
@@ -163,14 +165,12 @@ void setup() {
   //Initialise EEPROM flash module and backup registry
   BackupInit();
 
-  Serial.print(F("\nStart WiFiMQTT on "));
-  Serial.print(DEVICE_BOARD_NAME);
+  Serial.print("Start WiFiMQTT on ");
+  Serial.println(DEVICE_BOARD_NAME);
   
   initializeWiFiShield(DEVICE_BOARD_NAME);
   Serial.println("WiFi shield init done");
 
-  Serial.print(F("Connecting to WiFi network"));
-  Serial.print(ssid);
   establishWiFi(ssid, password);
 
   // you're connected now, so print out the data
@@ -263,29 +263,48 @@ void setup() {
   //setup flow meter
   FlowMeterInit();
 
-  button1.begin();
-  button1.enableInterrupt(button1ISR);
-  button1.onPressed(Button1Handler);
-  button2.begin();
-  button2.enableInterrupt(button2ISR);
-  button2.onPressedFor(5000, Button2HandlerLong);
+  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN_1), ButtonsUpdateCallback, CHANGE);
+  button1.attachClick(Button1Handler);
+
+  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN_2), ButtonsUpdateCallback, CHANGE);
+  button2.attachClick(Button2Handler);
+  button2.setPressTicks(5000);
+  button2.attachLongPressStart(Button2HandlerLong);
+
+   
 
   //SYNC RTC with NTP
   timeClient.begin();
+  timeClient.forceUpdate();
+  Serial.print("Syncronize RTC with NTP server. Received date:  ");
+  Serial.println(timeClient.getEpochTime());
   RTCInit(timeClient.getEpochTime());
   
   //Initialise EEPROM flash module, backup registry and restore saved values
   BackupInit();
   BackupGet();
 
-  runner.enableAll(true);
+  //runner.enableAll(true);
 
-  //runner.startNow();  // This creates a new scheduling starting point for all ACTIVE tasks.
-  
+  runner.startNow();  // This creates a new scheduling starting point for all ACTIVE tasks.
+    
 }
 
-void loop() {
+void loop()
+{
   runner.execute();
+}
+
+void Delayer()
+{
+  runner.addTask(mqttThread);
+  mqttThread.enableDelayed();
+
+  runner.addTask(RTCStore);
+  RTCStore.enableDelayed();
+
+  runner.addTask(EEPROMStore);
+  EEPROMStore.enableDelayed();
 }
 
 
@@ -317,27 +336,18 @@ void MQTTMessageCallback()
 
 void ButtonsUpdateCallback()
 {
-  button1.update();
-  button2.update();
+  button1.tick();
+  button2.tick();
   IWatchdog.reload();
+  if (timeClient.update()) {
+    Serial.println(timeClient.getEpochTime());
+  }
 }
 
 void button1ISR()
 {
-  button1.read();
-  if (button1.wasPressed())
-  {
-    //beeper
-    digitalWrite(BEEPER_PIN, HIGH);
-  }
-  else {
-    digitalWrite(BEEPER_PIN, LOW);
-  }
-}
-void button2ISR()
-{
-  button2.read();
-  if (button1.wasPressed())
+  Serial.println("button 1 was pressed");
+  if (1)
   {
     //beeper
     digitalWrite(BEEPER_PIN, HIGH);
@@ -349,6 +359,7 @@ void button2ISR()
 
 void Button1Handler()
 {
+  Serial.println("button 1 was pressed");
   switch(DisplayState)
   {
     case DisplayView::Reset1:

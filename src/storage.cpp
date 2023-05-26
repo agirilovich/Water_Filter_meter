@@ -47,12 +47,16 @@ void RTCInit(unsigned long EpochTime)
 void BackupEEPROMPut()
 {
   ActualData.Timestamp = rtc.getEpoch();
+  Serial.print("Storing current meter data to EEPROM with epoch: ");
+  Serial.println(ActualData.Timestamp);
   flash_mem.write(ActualData);
 }
 
 void BackupRTCPut()
 {
   ActualData.Timestamp = rtc.getEpoch();
+  Serial.print("Storing current meter data to RTC with epoch: ");
+  Serial.println(ActualData.Timestamp);
   setBackupRegister(0, ActualData.Timestamp);
   setBackupRegister(1, ActualData.WaterConsumption);
   setBackupRegister(2, ActualData.WaterConsumptionFilter1);
@@ -87,4 +91,13 @@ void BackupGet()
     ActualData.WaterConsumptionFilter2 = EEPROMData.WaterConsumptionFilter2;
     ActualData.WaterConsumptionFilter3 = EEPROMData.WaterConsumptionFilter3;
   }
+  Serial.println("Restored data: ");
+  Serial.print("Consumption: ");
+  Serial.print(ActualData.WaterConsumption);
+  Serial.print(", Filter 1: ");
+  Serial.print(ActualData.WaterConsumptionFilter1);
+  Serial.print(", Filter 2: ");
+  Serial.print(ActualData.WaterConsumptionFilter2);
+  Serial.print(", Filter 3: ");
+  Serial.println(ActualData.WaterConsumptionFilter3);
 }

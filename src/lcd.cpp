@@ -56,7 +56,7 @@ void DisplayControlCallback()
     case DisplayView::Consumption:
     {
       strcpy(Title, "Consumption, L:");
-      sprintf(DisplayBuf, "%" PRIu64, ActualData.WaterConsumption / 1000);
+      sprintf(DisplayBuf, "%" PRIu64, ActualData.WaterConsumption + 1000);
       clearLCD();
       printLCD(0, Title);
       printLCD(1, DisplayBuf);

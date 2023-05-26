@@ -20,6 +20,11 @@ HardwareTimer *FlowTimer;
 Thermistor* thermistor;
 
 
+//LWMA values filtration
+#include <RunningAverage.h>
+RunningAverage TDSArray(TDSArrayLenght);
+
+
 void InputCapture_callback(void)
 {
   CurrentCapture = FlowTimer->getCaptureCompare(channel);
@@ -128,6 +133,7 @@ void TDSSensorInit(void)
   gravityTds.setAref(5.0);  //reference voltage on ADC, default 5.0V on Arduino UNO
   gravityTds.setAdcRange(4096);  //1024 for 10bit ADC;4096 for 12bit ADC
   gravityTds.begin();  //initialization
+  TDSArray.clear();
 }
 
 void TDSSensorCallback()
@@ -135,8 +141,10 @@ void TDSSensorCallback()
   Serial.println("TDS sensor measure...");
   gravityTds.setTemperature(temperature);  // set the temperature and execute temperature compensation
   gravityTds.update();  //sample and calculate
-  tdsValue = gravityTds.getTdsValue();  // then get the value
+  float curTDS = gravityTds.getTdsValue(); // then get the value
   Serial.print("Received value: ");
-  Serial.print(tdsValue);
+  Serial.print(curTDS);
   Serial.println(" ppm");
+  TDSArray.addValue(curTDS); 
+  tdsValue = TDSArray.getAverage();
 }
