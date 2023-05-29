@@ -1,13 +1,15 @@
 #include <Arduino.h>
 #include <stdint.h>
 
-#define FlowSensorPin PB10
+#define FlowSensorPin PA15
 
-#define NTC_REFERENCE_RESISTANCE   10000
+#define NTC_REFERENCE_RESISTANCE   68800
 #define NTC_NOMINAL_RESISTANCE     50000
 #define NTC_NOMINAL_TEMPERATURE    25
 #define NTC_B_VALUE                3950
-#define STM32_ANALOG_RESOLUTION 4095
+//#define STM32_ANALOG_RESOLUTION 4095
+#define STM32_ANALOG_RESOLUTION 1024
+
 
 #define NTC_SENSOR_PIN PB0
 
@@ -18,8 +20,6 @@
 void FlowMeterInit(void);
 void NTCSensorInit(void);
 void TDSSensorInit(void);
-
-uint32_t GetFlowCounter(void);
 
 extern float tdsValue;
 extern float temperature;

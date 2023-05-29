@@ -8,14 +8,11 @@ GravityTDS gravityTds;
 float tdsValue = 0;
 float temperature = NTC_NOMINAL_TEMPERATURE;
 
+uint32_t PulseCounter = 0;
+
 struct FlowMeterData ActualData = {0, 0, 0, 0};
 
-uint32_t channel;
-volatile uint32_t LastCapture = 0, CurrentCapture, PulseCounter = 0;
-volatile uint32_t rolloverCompareCount = 0;
-const float FlowPulseCharacteristics = 1/(60*13);
-
-HardwareTimer *FlowTimer;
+const long double FlowPulseCharacteristics = 1.2820513;
 
 Thermistor* thermistor;
 
@@ -25,82 +22,48 @@ Thermistor* thermistor;
 RunningAverage TDSArray(TDSArrayLenght);
 
 
-void InputCapture_callback(void)
+void pulse_ISR()
 {
-  CurrentCapture = FlowTimer->getCaptureCompare(channel);
-  
-  if (CurrentCapture > LastCapture) {
-    PulseCounter = PulseCounter + CurrentCapture - LastCapture;
-  }
-  else if (CurrentCapture <= LastCapture) {
-    /* 0x1000 is max overflow value */
-    PulseCounter = PulseCounter + 0x10000 + CurrentCapture - LastCapture;
-  }
-  LastCapture = CurrentCapture;
-  rolloverCompareCount = 0;
-}
-
-void Rollover_callback(void)
-{
-  rolloverCompareCount++;
-
-  if (rolloverCompareCount > 1)
-  {
-    CurrentCapture = 0;
-  }
+  PulseCounter++;
 }
 
 void FlowMeterInit(void)
 {
+  Serial.print("Setting up Hardware Timer for Flow Sensor with period: ");
+  TIM_TypeDef *FlowTimerInstance = TIM3;
+  HardwareTimer *FlowThread = new HardwareTimer(FlowTimerInstance);
+  FlowThread->pause();
+  FlowThread->setPrescaleFactor(65536);
+  Serial.print(FlowThread->getOverflow() / (FlowThread->getTimerClkFreq() / FlowThread->getPrescaleFactor()));
+  Serial.println(" sec");
+  FlowThread->attachInterrupt(FLowMeterCallback);
+  FlowThread->refresh();
+  
+  pinMode(FlowSensorPin, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(FlowSensorPin), pulse_ISR, FALLING);
+
   Serial.println("Initialise Flow Meter Counter...");
-  // Automatically retrieve TIM instance and channel associated to pin
-  TIM_TypeDef *Instance = (TIM_TypeDef *)pinmap_peripheral(digitalPinToPinName(FlowSensorPin), PinMap_PWM);
-  channel = STM_PIN_CHANNEL(pinmap_function(digitalPinToPinName(FlowSensorPin), PinMap_PWM));
-
-  // Instantiate HardwareTimer object.
-  FlowTimer = new HardwareTimer(Instance);
-
-  // Configure rising edge detection
-  FlowTimer->setMode(channel, TIMER_INPUT_CAPTURE_RISING, FlowSensorPin);
-
-  uint32_t PrescalerFactor = 1024;
-  FlowTimer->setPrescaleFactor(PrescalerFactor);
-  FlowTimer->setOverflow(0x10000); // Max Period value to have the largest possible time to detect rising edge and avoid timer rollover
-  FlowTimer->attachInterrupt(channel, InputCapture_callback);
-  FlowTimer->attachInterrupt(Rollover_callback);
-
-  Serial.print("Run Hardware Timer with frequency: ");
-  Serial.println(FlowTimer->getTimerClkFreq() / FlowTimer->getPrescaleFactor());
-
-  FlowTimer->resume();
-
-}
-
-uint32_t GetFlowCounter(void)
-{
-  uint32_t CurrentFlow;
-  FlowTimer->pauseChannel(channel);
-  InputCapture_callback();
-  CurrentFlow = PulseCounter * FlowPulseCharacteristics;
-  PulseCounter = 0;
-
-  FlowTimer->resumeChannel(channel);
-
-  return CurrentFlow;
+  
+  //FlowCounter->resume();
+  FlowThread->resume();
 }
 
 void FLowMeterCallback()
 {
-  uint32_t CurrentFlow;
   Serial.println("Read data from Input Counter Hardware Timer...");
-  CurrentFlow = GetFlowCounter();
+  long double CurrentFlow = PulseCounter * FlowPulseCharacteristics;
+  Serial.print("Counted pulses: ");
+  Serial.println(PulseCounter);
+  PulseCounter = 0;
   ActualData.WaterConsumption = ActualData.WaterConsumption + CurrentFlow;
   ActualData.WaterConsumptionFilter1 = ActualData.WaterConsumptionFilter1 + CurrentFlow;
   ActualData.WaterConsumptionFilter2 = ActualData.WaterConsumptionFilter2 + CurrentFlow;
   ActualData.WaterConsumptionFilter3 = ActualData.WaterConsumptionFilter3 + CurrentFlow;
   Serial.print("Received value: ");
-  Serial.print(ActualData.WaterConsumption);
-  Serial.println(" L");
+  Serial.print(int(CurrentFlow));
+  Serial.print(".");
+  Serial.print(int((CurrentFlow - int(CurrentFlow)) * 10000));
+  Serial.println(" mL");
 }
 
 
@@ -115,6 +78,16 @@ void NTCSensorInit(void)
     NTC_B_VALUE,
     STM32_ANALOG_RESOLUTION // <- for a thermistor calibration
   );
+  Serial.print("Setting up Hardware Timer for NTC Sensor with period: ");
+  TIM_TypeDef *TempTimerInstance = TIM10;
+  HardwareTimer *TempThread = new HardwareTimer(TempTimerInstance);
+  TempThread->pause();
+  TempThread->setPrescaleFactor(16384);
+  Serial.print(TempThread->getOverflow() / (TempThread->getTimerClkFreq() / TempThread->getPrescaleFactor()));
+  Serial.println(" sec");
+  TempThread->attachInterrupt(TemperatureSensorCallback);
+  TempThread->refresh();
+  TempThread->resume();
 }
 
 void TemperatureSensorCallback()
@@ -124,6 +97,7 @@ void TemperatureSensorCallback()
   Serial.print("Received value: ");
   Serial.print(temperature);
   Serial.println(" C");
+  Serial.println(analogRead(NTC_SENSOR_PIN));
 }
 
 void TDSSensorInit(void)
@@ -134,6 +108,16 @@ void TDSSensorInit(void)
   gravityTds.setAdcRange(4096);  //1024 for 10bit ADC;4096 for 12bit ADC
   gravityTds.begin();  //initialization
   TDSArray.clear();
+  Serial.print("Setting up Hardware Timer for TDS Sensor with period: ");
+  TIM_TypeDef *TDSTimerInstance = TIM11;
+  HardwareTimer *TDSThread = new HardwareTimer(TDSTimerInstance);
+  TDSThread->pause();
+  TDSThread->setPrescaleFactor(65536);
+  Serial.print(TDSThread->getOverflow() / (TDSThread->getTimerClkFreq() / TDSThread->getPrescaleFactor()));
+  Serial.println(" sec");
+  TDSThread->attachInterrupt(TDSSensorCallback);
+  TDSThread->refresh();
+  TDSThread->resume();
 }
 
 void TDSSensorCallback()

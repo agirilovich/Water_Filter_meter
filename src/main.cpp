@@ -49,14 +49,15 @@ const char *mqtt_pass = mqtt_password;
 
 
 //objects for button processing
-#include <OneButton.h>
-OneButton button1(BUTTON_PIN_1, true, false);
-OneButton button2(BUTTON_PIN_2, true, false);
+#include <EasyButton.h>
+EasyButton button1(BUTTON_PIN_1);
+EasyButton button2(BUTTON_PIN_2);
 void button1ISR();
 void button2ISR();
 void Button1Handler();
 void Button2Handler();
 void Button2HandlerLong();
+
 
 #include "lcd.h"
 
@@ -65,10 +66,7 @@ void Button2HandlerLong();
 #include "controlWiFi.h" 
 WiFiClient client;
 
-#include <NTPClient.h>
-WiFiEspAtUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pl.pool.ntp.org");
-
+#include <TimeLib.h>
 
 #include "MQTT_task.h"
 PubSubClient mqtt(client);
@@ -111,11 +109,8 @@ void MQTTMessageCallback();
 void ButtonsUpdateCallback();
 void Delayer();
 
-Task TDSThread(1 * TASK_MINUTE, TASK_FOREVER, &TDSSensorCallback, &runner, true);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
-Task FlowThread(1 * TASK_MINUTE, TASK_FOREVER, &FLowMeterCallback, &runner, true);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
-Task TempThread(10 * TASK_SECOND, TASK_FOREVER, &TemperatureSensorCallback, &runner, true);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
-Task DisplayControl(10 * TASK_SECOND, TASK_FOREVER, &DisplayControlCallback, &runner, true);
-Task ButtonsUpdate(1 * TASK_SECOND, TASK_FOREVER, &ButtonsUpdateCallback, &runner, true);
+//Task FlowThread(40 * TASK_SECOND, TASK_FOREVER, &FLowMeterCallback, &runner, true);  //Initially only task is enabled. It runs every 10 seconds indefinitely.
+Task DisplayLoop(20 * TASK_SECOND, TASK_FOREVER, &DisplayLoopCallback, &runner, true);
 Task ThreadDelay(0, TASK_ONCE, &Delayer, &runner, true);  //Delay for first run of MQTT publisher and store.
 Task mqttThread(5 * TASK_MINUTE, TASK_FOREVER, &MQTTMessageCallback);
 Task RTCStore(10 * TASK_MINUTE, TASK_FOREVER, &BackupRTCPut);
@@ -151,9 +146,6 @@ void setup() {
 
   //initialise LCD
   initializeLCD();
-
-  //setup NTC sensor
-  NTCSensorInit();
 
   //Set port for beeper
   Serial.print("Test beep signal");
@@ -259,32 +251,53 @@ void setup() {
 
   //Initialise TDS sensor
   TDSSensorInit();
+
+  //setup NTC sensor
+  NTCSensorInit();
   
   //setup flow meter
   FlowMeterInit();
 
-  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN_1), ButtonsUpdateCallback, CHANGE);
-  button1.attachClick(Button1Handler);
+  //attachInterrupt(digitalPinToInterrupt(BUTTON_PIN_1), ButtonsUpdateCallback, CHANGE);
+  //button1.attachClick(Button1Handler);
+  button1.begin();
+  button1.onPressed(Button1Handler);
+  button1.enableInterrupt(button1ISR);
 
-  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN_2), ButtonsUpdateCallback, CHANGE);
-  button2.attachClick(Button2Handler);
-  button2.setPressTicks(5000);
-  button2.attachLongPressStart(Button2HandlerLong);
+  button2.begin();
+  button2.onPressed(Button2Handler);
+  button2.enableInterrupt(button2ISR);
+  button2.onPressedFor(5000, Button2HandlerLong);
 
-   
-
+  //Set HardwareTimer for buttons update
+  Serial.print("Setting up Hardware Timer for buttons update with period: ");
+  TIM_TypeDef *ButtonsTimerInstance = TIM9;
+  HardwareTimer *ButtonsThread = new HardwareTimer(ButtonsTimerInstance);
+  ButtonsThread->pause();
+  ButtonsThread->setPrescaleFactor(2048);
+  Serial.print(ButtonsThread->getOverflow() / (ButtonsThread->getTimerClkFreq() / ButtonsThread->getPrescaleFactor()));
+  Serial.println(" sec");
+  ButtonsThread->attachInterrupt(ButtonsUpdateCallback);
+  ButtonsThread->refresh();
+  ButtonsThread->resume();
+  
   //SYNC RTC with NTP
-  timeClient.begin();
-  timeClient.forceUpdate();
-  Serial.print("Syncronize RTC with NTP server. Received date:  ");
-  Serial.println(timeClient.getEpochTime());
-  RTCInit(timeClient.getEpochTime());
+  Serial.print("Syncronize RTC with NTP server.");
+  WiFi.sntp("pl.pool.ntp.org");
+  while (WiFi.getTime() < SECS_YR_2000) {
+    delay(1000);
+    Serial.print('.');
+  }
+  ActualData.Timestamp = WiFi.getTime();
+  Serial.println();
+  Serial.print("Received date:  ");
+  Serial.println(ActualData.Timestamp);
+  setTime(ActualData.Timestamp);
+  RTCInit(ActualData.Timestamp);
   
   //Initialise EEPROM flash module, backup registry and restore saved values
   BackupInit();
   BackupGet();
-
-  //runner.enableAll(true);
 
   runner.startNow();  // This creates a new scheduling starting point for all ACTIVE tasks.
     
@@ -313,7 +326,7 @@ void MQTTMessageCallback()
   char MessageBuf[16];
   //Publish MQTT messages
   Serial.println("Publishing MQTT messages...");
-  //try to publiosh first message
+  //try to publish first message
   sprintf(MessageBuf, "%2.3f", temperature);
   if (!publishMQTTPayload(mqtt, mqtt_user, mqtt_pass, MQTTTempTopicState, MessageBuf))
   {
@@ -336,74 +349,67 @@ void MQTTMessageCallback()
 
 void ButtonsUpdateCallback()
 {
-  button1.tick();
-  button2.tick();
+  button2.update();
   IWatchdog.reload();
-  if (timeClient.update()) {
-    Serial.println(timeClient.getEpochTime());
-  }
 }
 
 void button1ISR()
 {
-  Serial.println("button 1 was pressed");
-  if (1)
-  {
-    //beeper
-    digitalWrite(BEEPER_PIN, HIGH);
-  }
-  else {
-    digitalWrite(BEEPER_PIN, LOW);
-  }
+  button1.read();
+}
+
+void button2ISR()
+{
+  button2.read();
 }
 
 void Button1Handler()
 {
   Serial.println("button 1 was pressed");
+  digitalWrite(BEEPER_PIN, HIGH);
+  delay(50);
+  digitalWrite(BEEPER_PIN, LOW);
   switch(DisplayState)
   {
     case DisplayView::Reset1:
     {
-      DisplayControl.disable();
       DisplayState = 7;
       DisplayControlCallback();
       DisplayState = 0;
-      DisplayControl.enableDelayed(90);
+      DisplayLoop.enableDelayed(30);
     }
     case DisplayView::Reset2:
     {
-      DisplayControl.disable();
       DisplayState = 7;
       DisplayControlCallback();
       DisplayState = 0;
-      DisplayControl.enableDelayed(90);
+      DisplayLoop.enableDelayed(30);
     }
     case DisplayView::Reset3:
     {
-      DisplayControl.disable();
       DisplayState = 7;
       DisplayControlCallback();
       DisplayState = 0;
-      DisplayControl.enableDelayed(90);
+      DisplayLoop.enableDelayed(30);
     }
     case DisplayView::Cancel:
     {
-      DisplayControl.disable();
+      DisplayLoop.disable();
       DisplayState = 7;
       DisplayControlCallback();
       DisplayState = 0;
-      DisplayControl.enableDelayed(90);
+      DisplayLoop.enableDelayed(30);
     }
     case DisplayView::Done:
     {
-      DisplayControl.disable();
+      DisplayLoop.disable();
       DisplayState = 0;
       DisplayControlCallback();
-      DisplayControl.enableDelayed(90);
+      DisplayLoop.enableDelayed(30);
     }
     default:
     {
-      DisplayControlCallback();
+      DisplayLoopCallback();
     }
   }
 }
@@ -411,8 +417,12 @@ void Button1Handler()
 
 void Button2HandlerLong()
 {
+  Serial.println("long button 2 was pressed");
+  digitalWrite(BEEPER_PIN, HIGH);
+  delay(300);
+  digitalWrite(BEEPER_PIN, LOW);
   //pause loop in a display
-  DisplayControl.disable();
+  DisplayLoop.disable();
   switch(DisplayState)
   {
     case DisplayView::Filter1:
@@ -437,14 +447,19 @@ void Button2HandlerLong()
     {
       DisplayState = 6;
       DisplayControlCallback();
+      DisplayLoop.enableDelayed();
     }
   }
 }
 
 void Button2Handler()
 {
+  Serial.println("button 2 was pressed");
+  digitalWrite(BEEPER_PIN, HIGH);
+  delay(50);
+  digitalWrite(BEEPER_PIN, LOW);
   //pause loop in a display
-  DisplayControl.disable();
+  DisplayLoop.disable();
   switch(DisplayState)
   {
     case DisplayView::Reset1:
@@ -477,5 +492,5 @@ void Button2Handler()
       DisplayControlCallback();
     }
   }
-  DisplayControl.enableDelayed(30);
+  DisplayLoop.enableDelayed();
 }

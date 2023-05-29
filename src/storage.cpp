@@ -80,18 +80,19 @@ void BackupGet()
   Serial.println(RTCData.Timestamp);
   if (RTCData.Timestamp >= EEPROMData.Timestamp)
   {
+    Serial.println("Restored data from RTC");
     ActualData.WaterConsumption = RTCData.WaterConsumption;
     ActualData.WaterConsumptionFilter1 = RTCData.WaterConsumptionFilter1;
     ActualData.WaterConsumptionFilter2 = RTCData.WaterConsumptionFilter2;
     ActualData.WaterConsumptionFilter3 = RTCData.WaterConsumptionFilter3;
   }
   else {
+    Serial.println("Restored data from EEPROM");
     ActualData.WaterConsumption = EEPROMData.WaterConsumption;
     ActualData.WaterConsumptionFilter1 = EEPROMData.WaterConsumptionFilter1;
     ActualData.WaterConsumptionFilter2 = EEPROMData.WaterConsumptionFilter2;
     ActualData.WaterConsumptionFilter3 = EEPROMData.WaterConsumptionFilter3;
   }
-  Serial.println("Restored data: ");
   Serial.print("Consumption: ");
   Serial.print(ActualData.WaterConsumption);
   Serial.print(", Filter 1: ");

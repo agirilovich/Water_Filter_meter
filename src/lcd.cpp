@@ -28,6 +28,19 @@ void clearLCD(void)
     lcd.clear();
 }
 
+void DisplayLoopCallback()
+{
+  if (DisplayState < 5)
+  {
+    DisplayState++;
+  }
+  else {
+    DisplayState = 0;
+  }
+  
+  DisplayControlCallback();
+}
+
 void DisplayControlCallback()
 {
   char Title[16];
@@ -36,61 +49,55 @@ void DisplayControlCallback()
     case DisplayView::Temperature:
     {
       strcpy(Title, "Temperature, C:");
-      sprintf(DisplayBuf, "%2.3f", temperature);
+      sprintf(DisplayBuf, "%d", int(temperature));
       clearLCD();
       printLCD(0, Title);
       printLCD(1, DisplayBuf);
-      DisplayState++;
       break;
     }
     case DisplayView::TDS:
     {
       strcpy(Title, "Water TDS, ppm:");
-      sprintf(DisplayBuf, "%2.3f", tdsValue);
+      sprintf(DisplayBuf, "%d", int(tdsValue));
       clearLCD();
       printLCD(0, Title);
       printLCD(1, DisplayBuf);
-      DisplayState++;
       break;
     }
     case DisplayView::Consumption:
     {
-      strcpy(Title, "Consumption, L:");
-      sprintf(DisplayBuf, "%" PRIu64, ActualData.WaterConsumption + 1000);
+      strcpy(Title, "Consumption, mL:");
+      sprintf(DisplayBuf, "%d", int(ActualData.WaterConsumption));
       clearLCD();
       printLCD(0, Title);
       printLCD(1, DisplayBuf);
-      DisplayState++;
       break;
     }
     case DisplayView::Filter1:
     {
       strcpy(Title, "Filter 1, L:");
-      sprintf(DisplayBuf, "%" PRIu64, ActualData.WaterConsumptionFilter1 / 1000);
+      sprintf(DisplayBuf, "%d", int(ActualData.WaterConsumptionFilter1 / 1000));
       clearLCD();
       printLCD(0, Title);
       printLCD(1, DisplayBuf);
-      DisplayState++;
       break;
     }
     case DisplayView::Filter2:
     {
       strcpy(Title, "Filter 2, L:");
-      sprintf(DisplayBuf, "%" PRIu64, ActualData.WaterConsumptionFilter2 / 1000);
+      sprintf(DisplayBuf, "%d", int(ActualData.WaterConsumptionFilter2 / 1000));
       clearLCD();
       printLCD(0, Title);
       printLCD(1, DisplayBuf);
-      DisplayState++;
       break;
     }
     case DisplayView::Filter3:
     {
       strcpy(Title, "Filter 3, L:");
-      sprintf(DisplayBuf, "%" PRIu64, ActualData.WaterConsumptionFilter3 / 1000);
+      sprintf(DisplayBuf, "%d", int(ActualData.WaterConsumptionFilter3 / 1000));
       clearLCD();
       printLCD(0, Title);
       printLCD(1, DisplayBuf);
-      DisplayState = 0;
       break;
     }
     case DisplayView::Reset1:

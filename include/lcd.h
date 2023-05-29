@@ -13,6 +13,8 @@ extern int DisplayState;
 
 void DisplayControlCallback();
 
+void DisplayLoopCallback();
+
 void initializeLCD(void);
 
 void printLCD(int line, char *text);
