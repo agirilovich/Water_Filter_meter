@@ -7,4 +7,4 @@
 
 void printWifiStatus();
 void initializeWiFiShield(const char *device_name);
-void establishWiFi(const char *ssid, const char *password);
+void establishWiFi();

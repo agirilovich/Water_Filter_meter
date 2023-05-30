@@ -1,5 +1,6 @@
 #include "storage.h"
 #include "flowmeter.h"
+#include "MQTT_task.h"
 
 #include <Wire.h>
 #include <I2C_eeprom.h>
@@ -27,13 +28,36 @@ void BackupInit()
     Serial.println("EEPROM has been initialized");
     Serial.print("Write counter: ");
     Serial.println(writes);
+    Serial.print("Setting up Hardware Timer for backup to EEPROM with period: ");
+    TIM_TypeDef *EEPROMTimerInstance = TIM2;
+    HardwareTimer *EEPROMStore = new HardwareTimer(EEPROMTimerInstance);
+    EEPROMStore->pause();
+    EEPROMStore->setPrescaleFactor(65536);
+    EEPROMStore->setOverflow(4194304);
+    Serial.print(EEPROMStore->getOverflow() / (EEPROMStore->getTimerClkFreq() / EEPROMStore->getPrescaleFactor()) / 60);
+    Serial.println(" min");
+    EEPROMStore->refresh();
+    EEPROMStore->resume();
+    EEPROMStore->attachInterrupt(BackupEEPROMPut);
   }
   else {
     Serial.println("ERROR: Can't find eeprom\nstopped...");
     while (1);
   }
   
-  enableBackupDomain(); //enable RTC backup registry
+  Serial.println("Initialize RTC backup registry: ");
+  enableBackupDomain();
+  Serial.print("Setting up Hardware Timer for backup to RTC with period: ");
+  TIM_TypeDef *RTCTimerInstance = TIM5;
+  HardwareTimer *RTCStore = new HardwareTimer(RTCTimerInstance);
+  RTCStore->pause();
+  RTCStore->setPrescaleFactor(65536);
+  RTCStore->setOverflow(1048576);
+  Serial.print(RTCStore->getOverflow() / (RTCStore->getTimerClkFreq() / RTCStore->getPrescaleFactor()) / 60);
+  Serial.println(" min");
+  RTCStore->refresh();
+  RTCStore->resume();
+  RTCStore->attachInterrupt(BackupRTCPut); //backup to RTC
 }
 
 void RTCInit(unsigned long EpochTime)

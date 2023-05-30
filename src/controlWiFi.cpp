@@ -1,4 +1,8 @@
 #include "controlWiFi.h"
+//Import credentials from external file out of git repo
+#include <Credentials.h>
+const char *ssid = ssid_name;
+const char *password = ssid_password;
 
 int status = WL_IDLE_STATUS;     // the Wifi radio's status
 //define UART2 port
@@ -43,7 +47,7 @@ void initializeWiFiShield(const char *device_name)
     WiFi.setHostname(fqdn);
 }
 
-void establishWiFi(const char *ssid, const char *password)
+void establishWiFi()
 {
   
   WiFi.disconnect(); // to clear the way. not persistent
