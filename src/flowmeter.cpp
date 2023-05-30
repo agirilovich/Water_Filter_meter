@@ -1,6 +1,4 @@
 #include "flowmeter.h"
-#include <Thermistor.h>
-#include <NTC_Thermistor.h>
 #include "GravityTDS.h"
 
 GravityTDS gravityTds;
@@ -13,9 +11,6 @@ uint32_t PulseCounter = 0;
 struct FlowMeterData ActualData = {0, 0, 0, 0};
 
 const long double FlowPulseCharacteristics = 1.2820513;
-
-Thermistor* thermistor;
-
 
 //LWMA values filtration
 #include <RunningAverage.h>
@@ -70,14 +65,9 @@ void FLowMeterCallback()
 void NTCSensorInit(void)
 {
   Serial.println("Initialise NTC Sensor");
-  thermistor = new NTC_Thermistor(
-    NTC_SENSOR_PIN,
-    NTC_REFERENCE_RESISTANCE,
-    NTC_NOMINAL_RESISTANCE,
-    NTC_NOMINAL_TEMPERATURE,
-    NTC_B_VALUE,
-    STM32_ANALOG_RESOLUTION // <- for a thermistor calibration
-  );
+  analogReadResolution(12);
+  pinMode(NTC_SENSOR_PIN, INPUT_ANALOG);
+
   Serial.print("Setting up Hardware Timer for NTC Sensor with period: ");
   TIM_TypeDef *TempTimerInstance = TIM10;
   HardwareTimer *TempThread = new HardwareTimer(TempTimerInstance);
@@ -85,19 +75,20 @@ void NTCSensorInit(void)
   TempThread->setPrescaleFactor(16384);
   Serial.print(TempThread->getOverflow() / (TempThread->getTimerClkFreq() / TempThread->getPrescaleFactor()));
   Serial.println(" sec");
-  TempThread->attachInterrupt(TemperatureSensorCallback);
   TempThread->refresh();
   TempThread->resume();
+  TempThread->attachInterrupt(TemperatureSensorCallback);
 }
 
 void TemperatureSensorCallback()
 {
   Serial.println("NTC sensor measure...");
-  temperature = thermistor->readCelsius();
+  float Vout = analogRead(NTC_SENSOR_PIN)* (3.3 / STM32_ANALOG_RESOLUTION);
+  float R_NTC = (Vout * NTC_REFERENCE_RESISTANCE) /(5.00 - Vout); 
+  float temperature = ((NTC_NOMINAL_TEMPERATURE * NTC_B_VALUE)/(NTC_NOMINAL_TEMPERATURE * log(R_NTC / NTC_NOMINAL_RESISTANCE) + NTC_B_VALUE) - 273.15);
   Serial.print("Received value: ");
   Serial.print(temperature);
   Serial.println(" C");
-  Serial.println(analogRead(NTC_SENSOR_PIN));
 }
 
 void TDSSensorInit(void)
@@ -115,9 +106,9 @@ void TDSSensorInit(void)
   TDSThread->setPrescaleFactor(65536);
   Serial.print(TDSThread->getOverflow() / (TDSThread->getTimerClkFreq() / TDSThread->getPrescaleFactor()));
   Serial.println(" sec");
-  TDSThread->attachInterrupt(TDSSensorCallback);
   TDSThread->refresh();
   TDSThread->resume();
+  TDSThread->attachInterrupt(TDSSensorCallback);
 }
 
 void TDSSensorCallback()
