@@ -6,6 +6,8 @@
 #  define DEVICE_BOARD_NAME "WaterFilter"
 #endif
 
+#define DEVICE_HOSTNAME "waterflt"
+
 #define LED_PIN PC13
 
 #define BEEPER_PIN PA7
@@ -106,7 +108,7 @@ void setup() {
   Serial.print("Start WiFiMQTT on ");
   Serial.println(DEVICE_BOARD_NAME);
   
-  initializeWiFiShield(DEVICE_BOARD_NAME);
+  initializeWiFiShield(DEVICE_HOSTNAME);
   Serial.println("WiFi shield init done");
 
   establishWiFi();

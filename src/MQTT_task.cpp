@@ -17,8 +17,8 @@ const char *MQTTTempTopicState = MQTT_TEMP_TOPIC_STATE;
 const char *MQTTTDSTopicState = MQTT_TDS_TOPIC_STATE;
 const char *MQTTFlowTopicState = MQTT_FLOW_TOPIC_STATE;
 const char *MQTTFlowTopicStateFilter1 = MQTT_FILTER1_TOPIC_STATE;
-const char *MQTTFlowTopicStateFilter2 = MQTT_FILTER1_TOPIC_STATE;
-const char *MQTTFlowTopicStateFilter3 = MQTT_FILTER1_TOPIC_STATE;
+const char *MQTTFlowTopicStateFilter2 = MQTT_FILTER2_TOPIC_STATE;
+const char *MQTTFlowTopicStateFilter3 = MQTT_FILTER3_TOPIC_STATE;
 
 const char *mqtt_host = mqtt_server;
 const int mqtt_port = 1883;
@@ -52,15 +52,29 @@ void initMQTT()
   //Initialise MQTT autodiscovery topic and sensor
   mqtt.setServer(mqtt_host, mqtt_port);
 
+  Serial.print("Testing connection to mqtt broker...");
+  while (!mqtt.connect(DEVICE_BOARD_NAME, mqtt_user, mqtt_pass))
+  {
+    Serial.print(".");
+    delay(1000);
+  }
+
+  if (mqtt.connected()) {
+    Serial.println(" connected!");
+  } 
+
   //NTC sensor
   JsonSensorConfig["name"] = "Water temperature";
   JsonSensorConfig["device_class"] = "temperature";
   JsonSensorConfig["state_class"] = "measurement";
   JsonSensorConfig["unit_of_measurement"] = "C";
+  JsonSensorConfig["uniq_id"] = "waterfiltertempC";
   JsonSensorConfig["state_topic"] = MQTTTempTopicState;
 
   JsonObject device  = JsonSensorConfig.createNestedObject("device");
-  device["identifiers"][0] = SENSOR_NAME;
+  device["identifiers"][0] = "waterfilter000";
+  device["connections"][0][0] = "mac";
+  device["connections"][0][1] = "BC:FF:4D:F9:D5:13";
   device["model"] = "DWS-MH-01";
   device["name"] = SENSOR_NAME;
   device["manufacturer"] = "Aliexpress"; 
@@ -70,9 +84,10 @@ void initMQTT()
 
   //TDS sensor
   JsonSensorConfig["name"] = "Water TDS";
-  JsonSensorConfig["device_class"] = "None";
+  JsonSensorConfig["device_class"] = "water";
   JsonSensorConfig["state_class"] = "measurement";
   JsonSensorConfig["unit_of_measurement"] = "ppm";
+  JsonSensorConfig["uniq_id"] = "waterfiltertdsppm";
   JsonSensorConfig["state_topic"] = MQTTTDSTopicState;
 
   serializeJson(JsonSensorConfig, Buffer);
@@ -83,6 +98,7 @@ void initMQTT()
   JsonSensorConfig["device_class"] = "water";
   JsonSensorConfig["state_class"] = "measurement";
   JsonSensorConfig["unit_of_measurement"] = "mL";
+  JsonSensorConfig["uniq_id"] = "waterfilterflowml";
   JsonSensorConfig["state_topic"] = MQTTFlowTopicState;
 
   serializeJson(JsonSensorConfig, Buffer);
@@ -93,6 +109,7 @@ void initMQTT()
   JsonSensorConfig["device_class"] = "water";
   JsonSensorConfig["state_class"] = "measurement";
   JsonSensorConfig["unit_of_measurement"] = "L";
+  JsonSensorConfig["uniq_id"] = "waterfilterfilter1L";
   JsonSensorConfig["state_topic"] = MQTTFlowTopicStateFilter1;
 
   serializeJson(JsonSensorConfig, Buffer);
@@ -103,6 +120,7 @@ void initMQTT()
   JsonSensorConfig["device_class"] = "water";
   JsonSensorConfig["state_class"] = "measurement";
   JsonSensorConfig["unit_of_measurement"] = "L";
+  JsonSensorConfig["uniq_id"] = "waterfilterfilter2L";
   JsonSensorConfig["state_topic"] = MQTTFlowTopicStateFilter2;
 
   serializeJson(JsonSensorConfig, Buffer);
@@ -113,6 +131,7 @@ void initMQTT()
   JsonSensorConfig["device_class"] = "water";
   JsonSensorConfig["state_class"] = "measurement";
   JsonSensorConfig["unit_of_measurement"] = "L";
+  JsonSensorConfig["uniq_id"] = "waterfilterfilter3L";
   JsonSensorConfig["state_topic"] = MQTTFlowTopicStateFilter3;
 
   serializeJson(JsonSensorConfig, Buffer);
@@ -133,18 +152,6 @@ void initMQTT()
 void initializeMQTTTopic(const char *Topic, char *SensorConfig)
 {
 
-  Serial.print("Testing connection to mqtt broker...");
-  
-  while (!mqtt.connect(DEVICE_BOARD_NAME, mqtt_user, mqtt_pass))
-  {
-    Serial.print(".");
-    delay(1000);
-  }
-
-  if (mqtt.connected()) {
-    Serial.println(" connected!");
-  } 
-
   Serial.println("Initialise MQTT autodiscovery topics and sensors...");
   Serial.println(Topic);
 
@@ -154,18 +161,30 @@ void initializeMQTTTopic(const char *Topic, char *SensorConfig)
   }
   
   //Gracefully close connection to MQTT broker
-  mqtt.disconnect();
 }
 
-
-void publishMQTTPayload(const char *Topic, char *PayloadMessage)
+void MQTTMessageCallback()
 {
+  char MessageBuf[16];
+  //Publish MQTT messages
+  Serial.println("Publishing MQTT messages...");
   mqtt.connect(DEVICE_BOARD_NAME, mqtt_user, mqtt_pass);
   if (mqtt.connected()) {
-    if (mqtt.publish(Topic, PayloadMessage, false)) {
-      failedMQTTpublish = 0;
-    }
-  } 
+    failedMQTTpublish = 0;
+
+    sprintf(MessageBuf, "%d", int(temperature));
+    mqtt.publish(MQTTTempTopicState, MessageBuf, false);
+    sprintf(MessageBuf, "%d", int(tdsValue));
+    mqtt.publish(MQTTTDSTopicState, MessageBuf, false);
+    sprintf(MessageBuf, "%d", int(ActualData.WaterConsumption));
+    mqtt.publish(MQTTFlowTopicState, MessageBuf, false);
+    sprintf(MessageBuf, "%d", int(ActualData.WaterConsumptionFilter1 / 1000));
+    mqtt.publish(MQTTFlowTopicStateFilter1, MessageBuf, false);
+    sprintf(MessageBuf, "%d", int(ActualData.WaterConsumptionFilter2 / 1000));
+    mqtt.publish(MQTTFlowTopicStateFilter2, MessageBuf, false);
+    sprintf(MessageBuf, "%d", int(ActualData.WaterConsumptionFilter3 / 1000));
+    mqtt.publish(MQTTFlowTopicStateFilter3, MessageBuf, false);
+  }
   else {
     failedMQTTpublish++;
     Serial.println("Unable to connect to MQTT broker");
@@ -174,25 +193,6 @@ void publishMQTTPayload(const char *Topic, char *PayloadMessage)
     Serial.println(failedMQTTpublish);
   }
   mqtt.disconnect();
-}
-
-void MQTTMessageCallback()
-{
-  char MessageBuf[16];
-  //Publish MQTT messages
-  Serial.println("Publishing MQTT messages...");
-  sprintf(MessageBuf, "%d", int(temperature));
-  publishMQTTPayload(MQTTTempTopicState, MessageBuf);
-  sprintf(MessageBuf, "%d", int(tdsValue));
-  publishMQTTPayload(MQTTTDSTopicState, MessageBuf);
-  sprintf(MessageBuf, "%d", int(ActualData.WaterConsumption));
-  publishMQTTPayload(MQTTFlowTopicState, MessageBuf);
-  sprintf(MessageBuf, "%d", int(ActualData.WaterConsumptionFilter1 / 1000));
-  publishMQTTPayload(MQTTFilter1TopicConfig, MessageBuf);
-  sprintf(MessageBuf, "%d", int(ActualData.WaterConsumptionFilter2 / 1000));
-  publishMQTTPayload(MQTTFilter2TopicConfig, MessageBuf);
-  sprintf(MessageBuf, "%d", int(ActualData.WaterConsumptionFilter3 / 1000));
-  publishMQTTPayload(MQTTFilter3TopicConfig, MessageBuf);
   Serial.println("Done");
 }
 

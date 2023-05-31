@@ -85,7 +85,7 @@ void TemperatureSensorCallback()
   Serial.println("NTC sensor measure...");
   float Vout = analogRead(NTC_SENSOR_PIN)* (3.3 / STM32_ANALOG_RESOLUTION);
   float R_NTC = (Vout * NTC_REFERENCE_RESISTANCE) /(5.00 - Vout); 
-  float temperature = ((NTC_NOMINAL_TEMPERATURE * NTC_B_VALUE)/(NTC_NOMINAL_TEMPERATURE * log(R_NTC / NTC_NOMINAL_RESISTANCE) + NTC_B_VALUE) - 273.15);
+  temperature = ((NTC_NOMINAL_TEMPERATURE * NTC_B_VALUE)/(NTC_NOMINAL_TEMPERATURE * log(R_NTC / NTC_NOMINAL_RESISTANCE) + NTC_B_VALUE) - 273.15);
   Serial.print("Received value: ");
   Serial.print(temperature);
   Serial.println(" C");
