@@ -82,7 +82,7 @@ void initMQTT()
   JsonSensorConfig["name"] = "Water Flow";
   JsonSensorConfig["device_class"] = "water";
   JsonSensorConfig["state_class"] = "measurement";
-  JsonSensorConfig["unit_of_measurement"] = "L";
+  JsonSensorConfig["unit_of_measurement"] = "mL";
   JsonSensorConfig["state_topic"] = MQTTFlowTopicState;
 
   serializeJson(JsonSensorConfig, Buffer);
@@ -181,19 +181,17 @@ void MQTTMessageCallback()
   char MessageBuf[16];
   //Publish MQTT messages
   Serial.println("Publishing MQTT messages...");
-  //try to publish first message
-  sprintf(MessageBuf, "%2.3f", temperature);
+  sprintf(MessageBuf, "%d", int(temperature));
   publishMQTTPayload(MQTTTempTopicState, MessageBuf);
-  //keep publishing rest of messages
-  sprintf(MessageBuf, "%2.3f", tdsValue);
+  sprintf(MessageBuf, "%d", int(tdsValue));
   publishMQTTPayload(MQTTTDSTopicState, MessageBuf);
-  sprintf(MessageBuf, "%" PRIu64, ActualData.WaterConsumption / 1000);
+  sprintf(MessageBuf, "%d", int(ActualData.WaterConsumption));
   publishMQTTPayload(MQTTFlowTopicState, MessageBuf);
-  sprintf(MessageBuf, "%" PRIu64, ActualData.WaterConsumptionFilter1 / 1000);
+  sprintf(MessageBuf, "%d", int(ActualData.WaterConsumptionFilter1 / 1000));
   publishMQTTPayload(MQTTFilter1TopicConfig, MessageBuf);
-  sprintf(MessageBuf, "%" PRIu64, ActualData.WaterConsumptionFilter2 / 1000);
+  sprintf(MessageBuf, "%d", int(ActualData.WaterConsumptionFilter2 / 1000));
   publishMQTTPayload(MQTTFilter2TopicConfig, MessageBuf);
-  sprintf(MessageBuf, "%" PRIu64, ActualData.WaterConsumptionFilter3 / 1000);
+  sprintf(MessageBuf, "%d", int(ActualData.WaterConsumptionFilter3 / 1000));
   publishMQTTPayload(MQTTFilter3TopicConfig, MessageBuf);
   Serial.println("Done");
 }

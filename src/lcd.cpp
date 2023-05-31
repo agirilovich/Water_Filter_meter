@@ -66,7 +66,7 @@ void DisplayControlCallback()
     }
     case DisplayView::Consumption:
     {
-      strcpy(Title, "Consumption, mL:");
+      strcpy(Title, "Consumpt, mL:");
       sprintf(DisplayBuf, "%d", int(ActualData.WaterConsumption));
       clearLCD();
       printLCD(0, Title);

@@ -39,19 +39,15 @@ void Button2HandlerLong();
 #define _TASK_PRIORITY
 #define _TASK_TIMECRITICAL
 #define _TASK_WDT_IDS
-#include <TaskScheduler.h>
 
 //load all the objects about water meter
 #include "flowmeter.h"
 
-Scheduler runner; //normal priority scheduler
-
 void ButtonsUpdateCallback();
-
-Task DisplayLoop(20 * TASK_SECOND, TASK_FOREVER, &DisplayLoopCallback, &runner, true); //replace to TIM1,
 
 /*
 Tasker replaced by timers:
+TIM1 - LCD loop
 TIM2 - EEPROM
 TIM3 - Flow
 TIM4 - MQTT
@@ -60,6 +56,12 @@ TIM9 - buttons
 TIM10 - NTC
 TIM11 - TDS
 */
+
+TIM_TypeDef *LCDloopTimerInstance = TIM1;
+HardwareTimer *DisplayLoop = new HardwareTimer(LCDloopTimerInstance);
+
+TIM_TypeDef *ButtonsTimerInstance = TIM9;
+HardwareTimer *ButtonsThread = new HardwareTimer(ButtonsTimerInstance);
 
 void setup() {
   // Debug console
@@ -134,8 +136,6 @@ void setup() {
 
   //Set HardwareTimer for buttons update
   Serial.print("Setting up Hardware Timer for buttons update with period: ");
-  TIM_TypeDef *ButtonsTimerInstance = TIM9;
-  HardwareTimer *ButtonsThread = new HardwareTimer(ButtonsTimerInstance);
   ButtonsThread->pause();
   ButtonsThread->setPrescaleFactor(2048);
   Serial.print(ButtonsThread->getOverflow() / (ButtonsThread->getTimerClkFreq() / ButtonsThread->getPrescaleFactor()));
@@ -162,13 +162,23 @@ void setup() {
   BackupInit();
   BackupGet();
 
-  runner.startNow();  // This creates a new scheduling starting point for all ACTIVE tasks.
-    
+  //Set HardwareTimer for LCD loop
+  Serial.print("Setting up Hardware Timer for LCD loop with period: ");
+  DisplayLoop->pause();
+  DisplayLoop->setPrescaleFactor(32768);
+  DisplayLoop->setCount(500);
+  Serial.print(DisplayLoop->getOverflow() / (DisplayLoop->getTimerClkFreq() / DisplayLoop->getPrescaleFactor()));
+  Serial.println(" sec");
+  DisplayLoop->refresh();
+  DisplayLoop->attachInterrupt(DisplayLoopCallback);
+  DisplayLoop->setCount(0);
+  DisplayLoop->resume();
+
 }
 
 void loop()
 {
-  runner.execute();
+  
 }
 
 void ButtonsUpdateCallback()
@@ -204,36 +214,41 @@ void Button1Handler()
       DisplayState = 7;
       DisplayControlCallback();
       DisplayState = 0;
-      DisplayLoop.enableDelayed(30);
+      DisplayLoop->setCount(0);
+      DisplayLoop->resume();
     }
     case DisplayView::Reset2:
     {
       DisplayState = 7;
       DisplayControlCallback();
       DisplayState = 0;
-      DisplayLoop.enableDelayed(30);
+      DisplayLoop->setCount(0);
+      DisplayLoop->resume();
     }
     case DisplayView::Reset3:
     {
       DisplayState = 7;
       DisplayControlCallback();
       DisplayState = 0;
-      DisplayLoop.enableDelayed(30);
+      DisplayLoop->setCount(0);
+      DisplayLoop->resume();
     }
     case DisplayView::Cancel:
     {
-      DisplayLoop.disable();
+      DisplayLoop->pause();
       DisplayState = 7;
       DisplayControlCallback();
       DisplayState = 0;
-      DisplayLoop.enableDelayed(30);
+      DisplayLoop->setCount(0);
+      DisplayLoop->resume();
     }
     case DisplayView::Done:
     {
-      DisplayLoop.disable();
+      DisplayLoop->pause();
       DisplayState = 0;
       DisplayControlCallback();
-      DisplayLoop.enableDelayed(30);
+      DisplayLoop->setCount(0);
+      DisplayLoop->resume();
     }
     default:
     {
@@ -250,7 +265,7 @@ void Button2HandlerLong()
   delay(300);
   digitalWrite(BEEPER_PIN, LOW);
   //pause loop in a display
-  DisplayLoop.disable();
+  DisplayLoop->pause();
   switch(DisplayState)
   {
     case DisplayView::Filter1:
@@ -275,7 +290,8 @@ void Button2HandlerLong()
     {
       DisplayState = 6;
       DisplayControlCallback();
-      DisplayLoop.enableDelayed();
+      DisplayLoop->setCount(0);
+      DisplayLoop->resume();
     }
   }
 }
@@ -287,7 +303,7 @@ void Button2Handler()
   delay(50);
   digitalWrite(BEEPER_PIN, LOW);
   //pause loop in a display
-  DisplayLoop.disable();
+  DisplayLoop->pause();
   switch(DisplayState)
   {
     case DisplayView::Reset1:
@@ -320,5 +336,6 @@ void Button2Handler()
       DisplayControlCallback();
     }
   }
-  DisplayLoop.enableDelayed();
+  DisplayLoop->setCount(0);
+  DisplayLoop->resume();
 }
