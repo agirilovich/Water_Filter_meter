@@ -1,9 +1,13 @@
 #include "controlWiFi.h"
+//Import credentials from external file out of git repo
+#include <Credentials.h>
+const char *ssid = ssid_name;
+const char *password = ssid_password;
 
 int status = WL_IDLE_STATUS;     // the Wifi radio's status
-
 //define UART2 port
-HardwareSerial Serial1(PA10, PA9);
+//HardwareSerial EspSerial(USART1);
+HardwareSerial EspSerial(PB7, PB6);
 
 void printWifiStatus()
 {
@@ -13,34 +17,41 @@ void printWifiStatus()
   Serial.println(WiFi.localIP());
 
   Serial.print(F("SSID: "));
-  Serial.print(WiFi.SSID());
+  Serial.println(WiFi.SSID());
 
   // print the received signal strength:
   int32_t rssi = WiFi.RSSI();
-  Serial.print(F(", Signal strength (RSSI):"));
+  Serial.print("Signal strength (RSSI): ");
   Serial.print(rssi);
-  Serial.println(F(" dBm"));
+  Serial.println(" dBm");
 }
 
-void initializeWiFiShield()
+void initializeWiFiShield(const char *device_name)
 {
-    EspSerial.begin(115200);
-    WiFi.init(&EspSerial);
+  EspSerial.begin(115200);
+  WiFi.init(EspSerial, ESP_RESET_PIN);
 
-    if (WiFi.status() == WL_NO_MODULE) {
-      Serial.println();
-      Serial.println("Communication with WiFi module failed!");
-      // don't continue
-      while (true);
+  if (WiFi.status() == WL_NO_MODULE) {
+    Serial.println();
+    Serial.println("Communication with WiFi module failed!");
+    // don't continue
+    while (true) {
+      EspSerial.println(WiFi.status());
     }
+  }
+
+  char fqdn[13];
+  strcpy(fqdn, device_name);
+  WiFi.setHostname(fqdn);
 }
 
-void establishWiFi(const char *ssid, const char *password)
+void establishWiFi()
 {
-
+  
   WiFi.disconnect(); // to clear the way. not persistent
   WiFi.setPersistent(); // set the following WiFi connection as persistent
   WiFi.endAP(); // to disable default automatic start of persistent AP at startup
+  WiFi.setAutoConnect(true);
 
   Serial.print(F("Connecting to SSID: "));
   Serial.println(ssid);
