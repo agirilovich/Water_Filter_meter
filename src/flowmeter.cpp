@@ -10,7 +10,7 @@ uint32_t PulseCounter = 0;
 
 struct FlowMeterData ActualData = {0, 0, 0, 0};
 
-const long double FlowPulseCharacteristics = 1.2820513;
+const long double FlowPulseCharacteristics = 0.43;
 
 //LWMA values filtration
 #include <RunningAverage.h>
