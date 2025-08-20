@@ -67,7 +67,7 @@ void initMQTT()
   JsonSensorConfig["name"] = "Water temperature";
   JsonSensorConfig["device_class"] = "temperature";
   JsonSensorConfig["state_class"] = "measurement";
-  JsonSensorConfig["unit_of_measurement"] = "C";
+  JsonSensorConfig["unit_of_measurement"] = "°C";
   JsonSensorConfig["uniq_id"] = "waterfiltertempC";
   JsonSensorConfig["state_topic"] = MQTTTempTopicState;
 
@@ -84,7 +84,7 @@ void initMQTT()
 
   //TDS sensor
   JsonSensorConfig["name"] = "Water TDS";
-  JsonSensorConfig["device_class"] = "water";
+  JsonSensorConfig["device_class"] = "volatile_organic_compounds";
   JsonSensorConfig["state_class"] = "measurement";
   JsonSensorConfig["unit_of_measurement"] = "ppm";
   JsonSensorConfig["uniq_id"] = "waterfiltertdsppm";
@@ -95,7 +95,7 @@ void initMQTT()
 
   //Flow sensor
   JsonSensorConfig["name"] = "Water Flow";
-  JsonSensorConfig["device_class"] = "water";
+  JsonSensorConfig["device_class"] = "volume";
   JsonSensorConfig["state_class"] = "measurement";
   JsonSensorConfig["unit_of_measurement"] = "mL";
   JsonSensorConfig["uniq_id"] = "waterfilterflowml";
