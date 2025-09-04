@@ -96,7 +96,7 @@ void setup() {
   initializeLCD();
 
   //Set port for beeper
-  Serial.print("Test beep signal");
+  Serial.println("Test beep signal");
   pinMode(BEEPER_PIN, OUTPUT);
   digitalWrite(BEEPER_PIN, HIGH);
   delay(50);

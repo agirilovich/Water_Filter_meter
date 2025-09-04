@@ -96,7 +96,7 @@ void initMQTT()
   //Flow sensor
   JsonSensorConfig["name"] = "Water Flow";
   JsonSensorConfig["device_class"] = "volume";
-  JsonSensorConfig["state_class"] = "measurement";
+  JsonSensorConfig["state_class"] = "TOTAL_INCREASING";
   JsonSensorConfig["unit_of_measurement"] = "mL";
   JsonSensorConfig["uniq_id"] = "waterfilterflowml";
   JsonSensorConfig["state_topic"] = MQTTFlowTopicState;

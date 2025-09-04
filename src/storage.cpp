@@ -18,6 +18,7 @@ STM32RTC& rtc = STM32RTC::getInstance();
 
 void BackupInit()
 {
+  Wire1.begin();
   ee.begin();
   if (ee.isConnected())
   {
